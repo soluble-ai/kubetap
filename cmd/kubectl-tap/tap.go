@@ -78,6 +78,7 @@ var (
 	ErrNoSelectors                = errors.New("no selectors are set for the target Service")
 	ErrConfigMapNoMatch           = errors.New("the ConfigMap list did not match any ConfigMaps")
 	ErrKubetapPodNoMatch          = errors.New("a Kubetap Pod was not found")
+	ErrCreateResourceMismatch     = errors.New("the created resource did not match the desired state")
 )
 
 // ProxyOptions are options used to configure the mitmproxy configmap
@@ -249,6 +250,9 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 			_ = destroyConfigMap(configmapsClient, proxyOpts.Target)
 			rErr := createConfigMap(configmapsClient, proxyOpts)
 			if rErr != nil {
+				if errors.Is(os.ErrInvalid, rErr) {
+					return fmt.Errorf("there was an unexpected problem creating the ConfigMap")
+				}
 				return rErr
 			}
 		}
@@ -469,8 +473,22 @@ func createConfigMap(configmapClient corev1.ConfigMapInterface, proxyOpts ProxyO
 		},
 		BinaryData: cmData,
 	}
-	_, err := configmapClient.Create(context.TODO(), &cm, metav1.CreateOptions{})
-	return err
+	slen := len(cm.BinaryData[mitmproxyConfigFile])
+	if slen == 0 {
+		return os.ErrInvalid
+	}
+	ccm, err := configmapClient.Create(context.TODO(), &cm, metav1.CreateOptions{})
+	if err != nil {
+		return err
+	}
+	if ccm.BinaryData == nil {
+		return os.ErrInvalid
+	}
+	cdata := ccm.BinaryData[mitmproxyConfigFile]
+	if len(cdata) != slen {
+		return ErrCreateResourceMismatch
+	}
+	return nil
 }
 
 func destroyConfigMap(configmapClient corev1.ConfigMapInterface, serviceName string) error {
