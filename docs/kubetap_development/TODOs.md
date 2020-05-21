@@ -52,10 +52,3 @@ Don't want to force alpha features on anyone, but once this is in beta this will
 probably be the way forward. Will revisit.
 
 https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers/
-
-## Management
-
-### Add DCO
-
-https://probot.github.io/apps/dco/
-

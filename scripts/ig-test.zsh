@@ -76,7 +76,9 @@ if (( readyCt != 1 )); then
 fi
 unset readyCt
 
-sleep 10
+# without a delay here, port forwards occasionally fail. Need
+# to implement kubectl ready check like in kubetap.
+sleep 15
 kubectl port-forward svc/grafana -n default 2244:2244 &
 _kubetap_pf_one_pid=${!}
 kubectl port-forward svc/grafana -n default 4000:80 &
@@ -117,7 +119,9 @@ if (( readyCt != 1 )); then
 fi
 unset readyCt
 
-sleep 10
+# without a delay here, port forwards occasionally fail. Need
+# to implement kubectl ready check like in kubetap.
+sleep 15
 kubectl port-forward svc/dw-dokuwiki -n default 2244:2244 &
 _kubetap_pf_one_pid=${!}
 kubectl port-forward svc/dw-dokuwiki -n default 4000:80 &
