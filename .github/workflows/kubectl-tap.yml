@@ -107,8 +107,9 @@ jobs:
       with:
         fetch-depth: 0
     - 
-      name: Unshallow for goreleaser
-      run: git fetch --prune --unshallow
+      #name: Unshallow for goreleaser
+      name: Fetch for goreleaser
+      run: git fetch --prune
     - 
       name: Build
       run: ./scripts/build.zsh
