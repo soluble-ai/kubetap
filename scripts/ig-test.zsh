@@ -50,7 +50,7 @@ fi
 unset _kubetap_kind_clusters
 
 # catch sigints and exits to delete the cluster, keeping the last exit code
-trap '{ e=${?}; kind delete cluster --name kubetap ; exit ${e} }' SIGINT SIGTERM EXIT
+trap '{ e=${?}; sleep 1; kind delete cluster --name kubetap ; exit ${e} }' SIGINT SIGTERM EXIT
 kind create cluster --name kubetap
 
 #
@@ -136,8 +136,10 @@ kill ${_kubetap_pf_one_pid}
 kill ${_kubetap_pf_two_pid}
 unset _kubetap_pf_one_pid _kubetap_pf_two_pid
 
+sleep 3
 kubectl tap off dw-dokuwiki --context kind-kubetap
 
+sleep 1
 helm delete --kube-context kind-kubetap dw
 
 source ${script_dir}/_post.zsh
