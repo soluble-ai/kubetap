@@ -46,7 +46,7 @@ jobs:
 
   docker-build-scratch:
     timeout-minutes: 10
-    name: Build and push kubectl-tap to GCR
+    name: gcr.io/soluble-oss/kubectl-tap:latest
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -67,7 +67,7 @@ jobs:
 
   docker-build-alpine:
     timeout-minutes: 10
-    name: Build and push kubectl-tap to GCR
+    name: gcr.io/soluble-oss/kubectl-tap:alpine
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -128,6 +128,5 @@ jobs:
       with:
         formula-name: kubetap
         homebrew-tap: soluble-ai/homebrew-kubetap
-        branch: master
       env:
         COMMITTER_TOKEN: ${{ secrets.SOLUBLE_KUBETAP_BOT_TOKEN }}

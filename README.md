@@ -143,5 +143,5 @@ This project was created to compliment the [Soluble platform][soluble].
 [shield-license]: https://img.shields.io/github/license/soluble-ai/kubetap.svg
 [license]: https://github.com/soluble-ai/kubetap/blob/master/LICENSE
 [go-version]: https://github.com/soluble-ai/kubetap/blob/master/go.mod
-[latest-release]: https://github.com/soluble-ai/kubetap
+[latest-release]: https://github.com/soluble-ai/kubetap/releases
 [build-status]: https://github.com/soluble-ai/kubetap/actions

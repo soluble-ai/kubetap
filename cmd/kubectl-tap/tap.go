@@ -217,21 +217,22 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 
 		// set the upstream port so the proxy knows where to forward traffic
 		for _, ports := range targetService.Spec.Ports {
-			if ports.Port == targetSvcPort { //nolint: nestif
-				if ports.TargetPort.Type == intstr.Int {
-					proxyOpts.UpstreamPort = ports.TargetPort.String()
+			if ports.Port != targetSvcPort {
+				continue
+			}
+			if ports.TargetPort.Type == intstr.Int {
+				proxyOpts.UpstreamPort = ports.TargetPort.String()
+			}
+			// if named, must determine port from deployment spec
+			if ports.TargetPort.Type == intstr.String {
+				dp, err := deploymentFromSelectors(deploymentsClient, targetService.Spec.Selector)
+				if err != nil {
+					return fmt.Errorf("error resolving TargetPort in Deployment: %w", err)
 				}
-				// if named, must determine port from deployment spec
-				if ports.TargetPort.Type == intstr.String {
-					dp, err := deploymentFromSelectors(deploymentsClient, targetService.Spec.Selector)
-					if err != nil {
-						return fmt.Errorf("error resolving TargetPort in Deployment: %w", err)
-					}
-					for _, c := range dp.Spec.Template.Spec.Containers {
-						for _, p := range c.Ports {
-							if p.Name == ports.TargetPort.String() {
-								proxyOpts.UpstreamPort = strconv.Itoa(int(p.ContainerPort))
-							}
+				for _, c := range dp.Spec.Template.Spec.Containers {
+					for _, p := range c.Ports {
+						if p.Name == ports.TargetPort.String() {
+							proxyOpts.UpstreamPort = strconv.Itoa(int(p.ContainerPort))
 						}
 					}
 				}
