@@ -1,0 +1,43 @@
+site_name: kubetap
+site_description: 'Kubetap - kubectl plugin to proxy Kubernetes Services with ease'
+repo_name: 'soluble-ai/kubetap'
+repo_url: https://github.com/soluble-ai/kubetap
+copyright: 'Copyright &copy; 2020 Soluble'
+docs_dir: docs
+edit_uri: ""
+theme:
+  name: material
+  logo: img/kubetap.png
+  favicon: img/favicon.png
+  palette:
+    primary: blue
+    accent: orange
+extra_css:
+  - styles/website.css
+nav:
+  - Introduction: README.md
+  - 'Getting Started':
+    - Installation: getting_started/installation.md
+    - 'Quick Start': getting_started/quick-start.md
+    - Usage: getting_started/usage.md
+  - FAQ: FAQ.md
+  - Development:
+    - Overview: kubetap_development/README.md
+    - Contributing: kubetap_development/contributing.md
+    - TODOs: kubetap_development/TODOs.md
+    - Caveats: kubetap_development/caveats.md
+    - Scripts: kubetap_development/scripts.md
+  - About: about.md
+  - Acknowledgements: acknowledgements.md
+markdown_extensions:
+  - toc:
+      permalink: []
+  - admonition
+  - codehilite:
+      guess_lang: false
+extra:
+  social:
+    - icon: fontawesome/brands/github-alt
+      link: https://github.com/soluble-ai
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/solubleai

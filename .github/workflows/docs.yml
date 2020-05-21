@@ -1,0 +1,51 @@
+name: docs
+on:
+  push:
+    branches: [master]
+    paths:
+    - 'docs/**.md'
+
+jobs:
+  docs:
+    timeout-minutes: 5
+    name: Update documentation site
+    runs-on: ubuntu-latest
+    steps:
+    - 
+      name: Setup Python
+      uses: actions/setup-python@v1
+      with:
+        python-version: '3.x'
+    -
+      name: Setup Python env
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        pip install mkdocs mkdocs-material
+    -
+      name: Checkout
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+    - 
+      name: Setup Git
+      run: git config user.email "devnull@soluble.ai" && git config user.name "kubetap-bot"
+    - 
+      name: Update Docs
+      run: |
+        mkdocs build
+        cp -R ./site/* .
+        git clean -fX site
+    -
+      name: Add changes
+      run: |
+        git add .
+        git stash
+        git fetch --all
+        git checkout --progress gh-pages
+        git merge -Xtheirs master
+        git merge --squash -Xtheirs stash
+        git add .
+        git commit -a -m "Update docs"
+        git push origin gh-pages --force
+      env:
+        GITHUB_TOKEN: ${{ secrets.SOLUBLE_KUBETAP_BOT_TOKEN }}

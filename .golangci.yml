@@ -1,0 +1,16 @@
+run:
+  tests: false
+  timeout: 5m
+  skip-dirs:
+    - hack
+    - proxies
+linters:
+  enable-all: true
+  disable:
+    - wsl
+    - lll
+    - funlen
+    - godox
+    - gomnd
+    - gocognit
+    - goerr113

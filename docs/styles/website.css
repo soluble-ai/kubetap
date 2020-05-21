@@ -1,0 +1,31 @@
+.video {
+  position: relative;
+  padding-bottom: 56.25%;
+  padding-top: 10px;
+  height: 0;
+}
+
+.video iframe {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+}
+
+.smallimg {
+  width: auto;
+  height: auto;
+  max-width: 600px;
+  max-height: 600px;
+}
+
+.img {
+  float: right;
+  margin-left: 1em;
+  padding-bottom: 30px;
+  padding-top: 10px;
+  clear: both;
+  width: 100%;
+  height: 100%;
+}

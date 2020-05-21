@@ -1,0 +1,29 @@
+name: Push gcr.io/soluble-oss/kubetap-mitmproxy
+on:
+  # rebuild and push the container, updating dependencies, every 6 hours
+  schedule:
+    - cron: '0 */6 * * *'
+  push:
+    branches: [master]
+    paths:
+    - 'proxies/mitmproxy'
+
+jobs:
+  kubetap-mitmproxy:
+    timeout-minutes: 5
+    name: Build and push mitmproxy to GCR
+    runs-on: ubuntu-latest
+    steps:
+    - 
+      name: Checkout
+      uses: actions/checkout@v2
+    - 
+      name: Push to GCR
+      uses: docker/build-push-action@v1
+      with:
+        path: ./proxies/mitmproxy
+        username: _json_key
+        password: ${{ secrets.SOLUBLE_GCR_OSS_JSON }}
+        registry: gcr.io
+        repository: soluble-oss/kubetap-mitmproxy
+        tags: latest

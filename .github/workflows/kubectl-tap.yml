@@ -1,0 +1,128 @@
+name: kubectl-tap
+on:
+  push:
+    branches: [master]
+
+jobs:
+  build:
+    timeout-minutes: 15
+    name: Go build kubectl-tap
+    runs-on: ubuntu-latest
+    steps:
+    - 
+      name: Setup Go env
+      uses: actions/setup-go@v2
+      with:
+        go-version: '1.14.2'
+    - 
+      name: Checkout
+      uses: actions/checkout@v2
+    - 
+      name: Cache
+      uses: actions/cache@v1
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+    - 
+      name: Install packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install zsh kubectl
+    - 
+      name: Build
+      run: ./scripts/build.zsh
+    - 
+      name: Unit Test
+      run: ./scripts/test.zsh
+    - 
+      name: Integration Test
+      run: ./scripts/ig-test.zsh
+
+  docker-build-scratch:
+    timeout-minutes: 10
+    name: Build and push kubectl-tap to GCR
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - 
+      name: Checkout
+      uses: actions/checkout@v2
+    - 
+      name: Build binary and push to GCR
+      uses: docker/build-push-action@v1
+      with:
+        path: .
+        dockerfile: Dockerfile
+        username: _json_key
+        password: ${{ secrets.SOLUBLE_GCR_OSS_JSON }}
+        registry: gcr.io
+        repository: soluble-oss/kubectl-tap
+        tags: latest
+
+  docker-build-alpine:
+    timeout-minutes: 10
+    name: Build and push kubectl-tap to GCR
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - 
+      name: Checkout
+      uses: actions/checkout@v2
+    - 
+      name: Build binary and push to GCR
+      uses: docker/build-push-action@v1
+      with:
+        path: .
+        dockerfile: Dockerfile.alpine
+        username: _json_key
+        password: ${{ secrets.SOLUBLE_GCR_OSS_JSON }}
+        registry: gcr.io
+        repository: soluble-oss/kubectl-tap
+        tags: alpine
+
+  release:
+    timeout-minutes: 15
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build, docker-build-scratch, docker-build-alpine]
+    name: Release kubectl-tap
+    runs-on: ubuntu-latest
+    steps:
+    - 
+      name: Setup Go env
+      uses: actions/setup-go@v2
+      with:
+        go-version: '1.14.2'
+    - 
+      name: Install zsh
+      run: sudo apt-get update; sudo apt-get install zsh
+    - 
+      name: Checkout
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+    - 
+      name: Unshallow for goreleaser
+      run: git fetch --prune --unshallow
+    - 
+      name: Build
+      run: ./scripts/build.zsh
+    - 
+      name: Release
+      uses: goreleaser/goreleaser-action@v1.5.0
+      with:
+        version: v0.132.1
+        args: release --rm-dist
+      env:
+        GITHUB_TOKEN: ${{ secrets.SOLUBLE_KUBETAP_BOT_TOKEN }}
+    -
+      name: Update homebrew-tap
+      if: "!contains(github.ref, '-')" # skip RCs
+      uses: mislav/bump-homebrew-formula-action@v1.6
+      with:
+        formula-name: kubetap
+        homebrew-tap: soluble-ai/homebrew-kubetap
+        branch: master
+      env:
+        COMMITTER_TOKEN: ${{ secrets.SOLUBLE_KUBETAP_BOT_TOKEN }}

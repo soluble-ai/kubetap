@@ -1,0 +1,36 @@
+name: PR kubectl-tap
+on:
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    timeout-minutes: 15
+    name: Go build kubectl-tap
+    runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -mod=readonly
+      GOPROXY: https://proxy.golang.org
+    strategy:
+      matrix:
+        go: 
+        - '1.13'
+        - '1.14'
+    steps:
+    - 
+      name: Setup Go env
+      uses: actions/setup-go@v2
+      with:
+        go-version: ${{ matrix.go }}
+    - 
+      name: Install Dependencies
+      run: sudo apt-get update; sudo apt-get install zsh kubectl
+    - 
+      name: Checkout
+      uses: actions/checkout@v2
+    - 
+      name: Unit Test
+      run: ./scripts/test.zsh
+    - 
+      name: Integration Test
+      run: ./scripts/ig-test.zsh
