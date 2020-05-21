@@ -1,7 +1,11 @@
 name: kubectl-tap
 on:
   push:
+    # trigger on push to master
     branches: [master]
+    # and on semver tag
+    tags:
+      - v*.*.*
 
 jobs:
   build:
