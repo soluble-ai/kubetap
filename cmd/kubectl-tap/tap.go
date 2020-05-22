@@ -49,7 +49,7 @@ import (
 const (
 	kubetapContainerName         = "kubetap"
 	kubetapServicePortName       = "kubetap-web"
-	kubetapPortName              = "kubetap-listen" // must be < 15 bytes
+	kubetapPortName              = "kubetap-listen"
 	kubetapWebPortName           = "kubetap-web"
 	kubetapProxyListenPort       = 7777
 	kubetapProxyWebInterfacePort = 2244
@@ -125,8 +125,7 @@ func NewListCommand(client kubernetes.Interface, viper *viper.Viper) func(*cobra
 				fmt.Fprintf(cmd.OutOrStdout(), "No Services in the %s namespace are tapped.\n", namespace)
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Tapped Services in the %s namespace:\n", namespace)
-			fmt.Fprintln(cmd.OutOrStdout())
+			fmt.Fprintf(cmd.OutOrStdout(), "Tapped Services in the %s namespace:\n\n", namespace)
 			for k := range tappedServices {
 				fmt.Fprintf(cmd.OutOrStdout(), "%s\n", k)
 			}
@@ -183,6 +182,7 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 			return fmt.Errorf("--port flag not provided")
 		}
 		if namespace == "" {
+			viper.Set("namespace", "default")
 			namespace = "default"
 		}
 		exists, err := hasNamespace(client, namespace)
@@ -228,7 +228,7 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 			if ports.TargetPort.Type == intstr.String {
 				dp, err := deploymentFromSelectors(deploymentsClient, targetService.Spec.Selector)
 				if err != nil {
-					return fmt.Errorf("error resolving TargetPort in Deployment: %w", err)
+					return fmt.Errorf("error resolving Deployment from Service selectors: %w", err)
 				}
 				for _, c := range dp.Spec.Template.Spec.Containers {
 					for _, p := range c.Ports {
