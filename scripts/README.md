@@ -18,5 +18,5 @@ package.
 | `images.zsh`          | strip metadata and perform lossless compression                     |
 | `test.zsh`            | unit tests                                                          |
 | `ig-test.zsh`         | integration tests                                                   |
-| `_pre.zsh`            | handles output formatting and PWD storage                           |
-| `_post.zsh`           | restores PWD state from `pre.zsh`                                   |
+| `_pre.zsh`            | run by other scripts - handles output formatting and PWD storage    |
+| `_post.zsh`           | run by other scripts - restores PWD state from `pre.zsh`            |

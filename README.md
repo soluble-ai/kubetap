@@ -11,8 +11,8 @@
 
 ## What is Kubetap?
 
-Kubetap enables an operator to intercept all incoming HTTP traffic for a given
-Kubernetes Service.
+Kubetap is a kubectl plugin that enables an operator to easily deploy intercepting
+proxies for Kubernetes Services.
 
 ## Why Kubetap?
 
