@@ -8,12 +8,12 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Kubetap - kubectl plugin to proxy Kubernetes Services with ease">
+        <meta name="description" content="Kubetap - kubectl plugin to interactively proxy Kubernetes Services with ease">
       
       
       
       <link rel="shortcut icon" href="../../img/favicon.png">
-      <meta name="generator" content="mkdocs-1.1.2, mkdocs-material-5.2.0">
+      <meta name="generator" content="mkdocs-1.1.2, mkdocs-material-5.2.1">
     
     
       
@@ -21,7 +21,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.18ac144a.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.71dfd922.min.css">
       
         <link rel="stylesheet" href="../../assets/stylesheets/palette.616af814.min.css">
       
@@ -444,7 +444,7 @@ package.</p>
 <tbody>
 <tr>
 <td><code>build.zsh</code></td>
-<td>meta build script. runs all lint, test, and build scripts for kubectl-tap, excluding container builds</td>
+<td>meta build script, excluding container builds and integration tests</td>
 </tr>
 <tr>
 <td><code>build-mitmproxy.zsh</code></td>
@@ -455,8 +455,12 @@ package.</p>
 <td>builds the kubectl-tap binary</td>
 </tr>
 <tr>
-<td><code>docs.zsh</code></td>
+<td><code>docs-build.zsh</code></td>
 <td>builds the static files for gh-pages</td>
+</tr>
+<tr>
+<td><code>docs-serve.zsh</code></td>
+<td>interactive local docs served by mkdocs</td>
 </tr>
 <tr>
 <td><code>images.zsh</code></td>
@@ -464,7 +468,19 @@ package.</p>
 </tr>
 <tr>
 <td><code>test.zsh</code></td>
-<td>more extensive testing than <code>build.sh</code> (for PRs)</td>
+<td>unit tests</td>
+</tr>
+<tr>
+<td><code>ig-test.zsh</code></td>
+<td>integration tests</td>
+</tr>
+<tr>
+<td><code>_pre.zsh</code></td>
+<td>run by other scripts - handles output formatting and PWD storage</td>
+</tr>
+<tr>
+<td><code>_post.zsh</code></td>
+<td>run by other scripts - restores PWD state from <code>pre.zsh</code></td>
 </tr>
 </tbody>
 </table>

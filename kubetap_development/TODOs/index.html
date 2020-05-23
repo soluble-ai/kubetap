@@ -8,12 +8,12 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Kubetap - kubectl plugin to proxy Kubernetes Services with ease">
+        <meta name="description" content="Kubetap - kubectl plugin to interactively proxy Kubernetes Services with ease">
       
       
       
       <link rel="shortcut icon" href="../../img/favicon.png">
-      <meta name="generator" content="mkdocs-1.1.2, mkdocs-material-5.2.0">
+      <meta name="generator" content="mkdocs-1.1.2, mkdocs-material-5.2.1">
     
     
       
@@ -21,7 +21,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.18ac144a.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.71dfd922.min.css">
       
         <link rel="stylesheet" href="../../assets/stylesheets/palette.616af814.min.css">
       
@@ -607,29 +607,33 @@ to the client.</p>
 <li>
 <p>Data export implementation still undecided, options under consideration:</p>
 </li>
-<li>tcpdump + ( FF Send || S3 || PVC || stream )</li>
-<li>sharkd stream to operator</li>
+<li>tcpdump + ( FF Send || S3 || PVC || kubectl-tap client stream )</li>
 <li>webshark interactive interface (<a href="https://bitbucket.org/jwzawadzki/webshark/src">stale project</a>)</li>
 </ul>
 <h3 id="burp-mode">"Burp" mode</h3>
 <ul>
-<li>Blocked by <a href="https://github.com/kubernetes/kubernetes/issues/20227">kubernetes/kubernetes#20227</a></li>
+<li>"Blocked" by <a href="https://github.com/kubernetes/kubernetes/issues/20227">kubernetes/kubernetes#20227</a></li>
 <li>Reverse-proxy from container to host using native Kubernetes tools is ideal,
   but there are alternatives to consider in the interim such as <a href="https://github.com/omrikiei/ktunnel">ktunnel</a></li>
-<li>If raw capture feature is added, implementing our own tunnel is significantly
+<li>Once raw capture feature is added, implementing our own tunnel is significantly
 less of a challenge.</li>
 </ul>
 <h3 id="grpc-support">gRPC support</h3>
 <p>There is a nice proxy library <a href="https://github.com/mwitkow/grpc-proxy">here</a>, by mwitkow.
 It should be feasible to use this to route traffic to an operator. Thanks for
 the link, <a href="https://github.com/rakyll">@rakyll</a>!</p>
+<ul>
+<li>To be useful, this needs to provide a proxy flow list, plus a "repeater" interface.</li>
+<li>as far as I know, this tool doesn't exist. There is <a href="https://github.com/fullstorydev/grpcurl">grpcurl</a>,
+  but this doesn't provide proxy flow-through.</li>
+</ul>
 <h3 id="sidecar-yaml">Sidecar yaml</h3>
 <ul>
-<li>Optionally ingest sidecar configuration through yaml file.</li>
-<li>This is an optional feature, and will likely only be necessary for
-those few environments that require special configuration to function. We would
-like to support these environments, but in that case it's up to the operator
-to configure. Allowing yaml sidecar definition is the path to enable that.</li>
+<li>Optionally ingest sidecar configuration through a JSON/Yaml file.</li>
+<li>This should be an optional feature, and will likely only be necessary for
+  those few environments that require special configuration to function. We would
+  like to support these environments, but in that case it's up to the operator
+  to configure. Allowing yaml sidecar definition is the path to enable that.</li>
 </ul>
 <h2 id="architecture">Architecture</h2>
 <h3 id="use-ephemeral-containers-once-in-beta">Use Ephemeral Containers once in beta</h3>
