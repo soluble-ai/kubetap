@@ -49,7 +49,7 @@ import (
 const (
 	kubetapContainerName         = "kubetap"
 	kubetapServicePortName       = "kubetap-web"
-	kubetapPortName              = "kubetap-listen" // must be < 15 bytes
+	kubetapPortName              = "kubetap-listen"
 	kubetapWebPortName           = "kubetap-web"
 	kubetapProxyListenPort       = 7777
 	kubetapProxyWebInterfacePort = 2244
@@ -78,6 +78,7 @@ var (
 	ErrNoSelectors                = errors.New("no selectors are set for the target Service")
 	ErrConfigMapNoMatch           = errors.New("the ConfigMap list did not match any ConfigMaps")
 	ErrKubetapPodNoMatch          = errors.New("a Kubetap Pod was not found")
+	ErrCreateResourceMismatch     = errors.New("the created resource did not match the desired state")
 )
 
 // ProxyOptions are options used to configure the mitmproxy configmap
@@ -124,8 +125,7 @@ func NewListCommand(client kubernetes.Interface, viper *viper.Viper) func(*cobra
 				fmt.Fprintf(cmd.OutOrStdout(), "No Services in the %s namespace are tapped.\n", namespace)
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Tapped Services in the %s namespace:\n", namespace)
-			fmt.Fprintln(cmd.OutOrStdout())
+			fmt.Fprintf(cmd.OutOrStdout(), "Tapped Services in the %s namespace:\n\n", namespace)
 			for k := range tappedServices {
 				fmt.Fprintf(cmd.OutOrStdout(), "%s\n", k)
 			}
@@ -182,6 +182,7 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 			return fmt.Errorf("--port flag not provided")
 		}
 		if namespace == "" {
+			viper.Set("namespace", "default")
 			namespace = "default"
 		}
 		exists, err := hasNamespace(client, namespace)
@@ -217,21 +218,22 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 
 		// set the upstream port so the proxy knows where to forward traffic
 		for _, ports := range targetService.Spec.Ports {
-			if ports.Port == targetSvcPort { //nolint: nestif
-				if ports.TargetPort.Type == intstr.Int {
-					proxyOpts.UpstreamPort = ports.TargetPort.String()
+			if ports.Port != targetSvcPort {
+				continue
+			}
+			if ports.TargetPort.Type == intstr.Int {
+				proxyOpts.UpstreamPort = ports.TargetPort.String()
+			}
+			// if named, must determine port from deployment spec
+			if ports.TargetPort.Type == intstr.String {
+				dp, err := deploymentFromSelectors(deploymentsClient, targetService.Spec.Selector)
+				if err != nil {
+					return fmt.Errorf("error resolving Deployment from Service selectors: %w", err)
 				}
-				// if named, must determine port from deployment spec
-				if ports.TargetPort.Type == intstr.String {
-					dp, err := deploymentFromSelectors(deploymentsClient, targetService.Spec.Selector)
-					if err != nil {
-						return fmt.Errorf("error resolving TargetPort in Deployment: %w", err)
-					}
-					for _, c := range dp.Spec.Template.Spec.Containers {
-						for _, p := range c.Ports {
-							if p.Name == ports.TargetPort.String() {
-								proxyOpts.UpstreamPort = strconv.Itoa(int(p.ContainerPort))
-							}
+				for _, c := range dp.Spec.Template.Spec.Containers {
+					for _, p := range c.Ports {
+						if p.Name == ports.TargetPort.String() {
+							proxyOpts.UpstreamPort = strconv.Itoa(int(p.ContainerPort))
 						}
 					}
 				}
@@ -248,6 +250,9 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 			_ = destroyConfigMap(configmapsClient, proxyOpts.Target)
 			rErr := createConfigMap(configmapsClient, proxyOpts)
 			if rErr != nil {
+				if errors.Is(os.ErrInvalid, rErr) {
+					return fmt.Errorf("there was an unexpected problem creating the ConfigMap")
+				}
 				return rErr
 			}
 		}
@@ -468,8 +473,22 @@ func createConfigMap(configmapClient corev1.ConfigMapInterface, proxyOpts ProxyO
 		},
 		BinaryData: cmData,
 	}
-	_, err := configmapClient.Create(context.TODO(), &cm, metav1.CreateOptions{})
-	return err
+	slen := len(cm.BinaryData[mitmproxyConfigFile])
+	if slen == 0 {
+		return os.ErrInvalid
+	}
+	ccm, err := configmapClient.Create(context.TODO(), &cm, metav1.CreateOptions{})
+	if err != nil {
+		return err
+	}
+	if ccm.BinaryData == nil {
+		return os.ErrInvalid
+	}
+	cdata := ccm.BinaryData[mitmproxyConfigFile]
+	if len(cdata) != slen {
+		return ErrCreateResourceMismatch
+	}
+	return nil
 }
 
 func destroyConfigMap(configmapClient corev1.ConfigMapInterface, serviceName string) error {

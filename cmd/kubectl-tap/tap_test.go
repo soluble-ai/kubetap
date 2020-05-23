@@ -19,6 +19,7 @@ import (
 	"errors"
 	"io/ioutil"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -32,6 +33,10 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+const (
+	maxPortLen = 15
+)
+
 func Test_NewTapCommand(t *testing.T) {
 	tests := []struct {
 		Name       string
@@ -41,17 +46,17 @@ func Test_NewTapCommand(t *testing.T) {
 		Err        error
 	}{
 		{"simple", fakeClientUntappedSimple, 80, "default", nil},
-		{"multi_selector_match", fakeClientUntappedMultiSelectorMatch, 80, "default", nil},
 		{"no_namespace", fakeClientUntappedSimple, 80, "", nil},
 		{"stray_configmap", fakeClientUntappedWithConfigMap, 80, "default", nil},
+		{"named_ports", fakeClientUntappedNamedPorts, 80, "default", nil},
+		{"no_port_name", fakeClientUntappedNoPortName, 80, "default", nil},
 		{"incorrect_namespace", fakeClientUntappedSimple, 80, "notexist", ErrNamespaceNotExist},
 		{"incorrect_port", fakeClientUntappedSimple, 9999, "default", ErrServiceMissingPort},
 		{"tapped_simple", fakeClientTappedSimple, 80, "default", ErrServiceTapped},
 		{"missing_deployment", fakeClientUntappedWithoutDeployment, 80, "default", ErrServiceSelectorNoMatch},
-		{"no_namespace_in_cluster", fakeClientUntappedNoNamespace, 80, "default", ErrNamespaceNotExist},
+		{"no_namespace_in_cluster", fakeClientUntappedWithoutNamespace, 80, "default", ErrNamespaceNotExist},
 		{"deployment_without_labels", fakeClientUntappedNoLabels, 80, "default", ErrServiceSelectorNoMatch},
 		{"service_without_selectors", fakeClientUntappedNoSelectors, 80, "default", ErrNoSelectors},
-		{"multi_selector_partial_match", fakeClientUntappedMultiSelectorPartialMatch, 80, "default", ErrServiceSelectorNoMatch},
 		{"multi_deployment_match", fakeClientUntappedMultiDeploymentMatch, 80, "default", ErrServiceSelectorMultiMatch},
 		{"deployment_match_outside_namespace", fakeClientUntappedMatchOutsideNamespace, 80, "default", ErrServiceSelectorNoMatch},
 	}
@@ -69,10 +74,28 @@ func Test_NewTapCommand(t *testing.T) {
 				require.NotNil(err)
 				require.True(errors.Is(err, tc.Err))
 			} else {
+				// sanity checks
 				require.Nil(err)
-				fakeDeployment, err := fakeClient.AppsV1().Deployments("default").Get(context.TODO(), "sample-deployment", metav1.GetOptions{})
+				fakeDeployment, err := fakeClient.AppsV1().Deployments(testViper.GetString("namespace")).Get(context.TODO(), "sample-deployment", metav1.GetOptions{})
 				require.Nil(err)
 				require.Len(fakeDeployment.Spec.Template.Spec.Containers, 2, "sidecar was not successfully added to deployment spec")
+				// container checks
+				for _, c := range fakeDeployment.Spec.Template.Spec.Containers {
+					if c.Name != kubetapContainerName {
+						continue
+					}
+					for _, p := range c.Ports {
+						require.LessOrEqual(len(p.Name), maxPortLen, "port name max length exceeded")
+					}
+					require.GreaterOrEqual(len(c.Ports), 2, "tap port was not added to the deployment")
+				}
+				// configmap checks
+				fakeCM, err := fakeClient.CoreV1().ConfigMaps(testViper.GetString("namespace")).Get(context.TODO(), kubetapConfigMapPrefix+"sample-service", metav1.GetOptions{})
+				require.Nil(err)
+				require.NotNil(fakeCM)
+				require.True(strings.Contains(fakeCM.Name, kubetapConfigMapPrefix))
+				require.Contains(fakeCM.BinaryData, mitmproxyConfigFile)
+				require.Greater(len(fakeCM.BinaryData[mitmproxyConfigFile]), 0, "no data in ConfigMap")
 			}
 		})
 	}
@@ -83,21 +106,19 @@ func Test_NewUntapCommand(t *testing.T) {
 		Name       string
 		ClientFunc func() *fake.Clientset
 		Namespace  string
-		Service    string
 		Err        error
 	}{
-		{"simple", fakeClientTappedSimple, "default", "sample-service", nil},
-		{"untapped", fakeClientUntappedSimple, "default", "sample-service", nil},
-		{"named_ports", fakeClientUntappedNamedPorts, "default", "sample-service", nil},
-		{"incorrect_namespace", fakeClientUntappedSimple, "nsnotexist", "sample-service", nil},
-		{"no_namespace_in_cluster", fakeClientUntappedNoNamespace, "none", "sample-service", ErrNamespaceNotExist},
-		{"missing_deployment", fakeClientUntappedWithoutDeployment, "default", "sample-service", ErrServiceSelectorNoMatch},
-		{"no_namespace_in_cluster", fakeClientUntappedNoNamespace, "default", "sample-service", ErrNamespaceNotExist},
-		{"deployment_without_labels", fakeClientUntappedNoLabels, "default", "sample-service", ErrServiceSelectorNoMatch},
-		{"service_without_selectors", fakeClientUntappedNoSelectors, "default", "sample-service", ErrNoSelectors},
-		{"multi_selector_partial_match", fakeClientUntappedMultiSelectorPartialMatch, "default", "sample-service", ErrServiceSelectorNoMatch},
-		{"multi_deployment_match", fakeClientUntappedMultiDeploymentMatch, "default", "sample-service", ErrServiceSelectorMultiMatch},
-		{"deployment_match_outside_namespace", fakeClientUntappedMatchOutsideNamespace, "default", "sample-service", ErrServiceSelectorNoMatch},
+		{"simple", fakeClientTappedSimple, "default", nil},
+		{"untapped", fakeClientUntappedSimple, "default", nil},
+		{"named_ports", fakeClientTappedNamedPorts, "default", nil},
+		{"incorrect_namespace", fakeClientUntappedSimple, "nsnotexist", nil},
+		{"no_port_name", fakeClientTappedNamedPorts, "default", nil},
+		{"no_namespace_in_cluster", fakeClientUntappedWithoutNamespace, "none", ErrNamespaceNotExist},
+		{"missing_deployment", fakeClientUntappedWithoutDeployment, "default", ErrServiceSelectorNoMatch},
+		{"deployment_without_labels", fakeClientUntappedNoLabels, "default", ErrServiceSelectorNoMatch},
+		{"service_without_selectors", fakeClientUntappedNoSelectors, "default", ErrNoSelectors},
+		{"multi_deployment_match", fakeClientUntappedMultiDeploymentMatch, "default", ErrServiceSelectorMultiMatch},
+		{"deployment_match_outside_namespace", fakeClientUntappedMatchOutsideNamespace, "default", ErrServiceSelectorNoMatch},
 	}
 	for _, tc := range tests {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -107,7 +128,7 @@ func Test_NewUntapCommand(t *testing.T) {
 			b := bytes.NewBufferString("")
 			cmd := &cobra.Command{}
 			cmd.SetOutput(b)
-			err := NewUntapCommand(fakeClient, testViper)(cmd, []string{tc.Service})
+			err := NewUntapCommand(fakeClient, testViper)(cmd, []string{"sample-service"})
 			if tc.Err != nil {
 				require.NotNil(err)
 				require.True(errors.Is(err, tc.Err))
@@ -168,7 +189,7 @@ func Test_DestroyConfigMap(t *testing.T) {
 		{"simple", "sample-service", fakeClientTappedSimple, nil},
 		{"untapped", "sample-service", fakeClientUntappedSimple, ErrConfigMapNoMatch},
 		{"no_svc_name", "", fakeClientTappedSimple, os.ErrInvalid},
-		{"missing_annotations", "sample-service", fakeClientTappedNilAnnotations, ErrConfigMapNoMatch},
+		{"missing_annotations", "sample-service", fakeClientTappedWithoutAnnotations, ErrConfigMapNoMatch},
 	}
 	for _, tc := range tests {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -186,729 +207,300 @@ func Test_DestroyConfigMap(t *testing.T) {
 	}
 }
 
-func fakeClientUntappedSimple() *fake.Clientset {
-	return fake.NewSimpleClientset(
-		&v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "default",
+var (
+	simpleNamespace = v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "default",
+		},
+	}
+
+	simpleDeployment = k8sappsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "sample-deployment",
+			Namespace: "default",
+			Annotations: map[string]string{
+				"my-annotation": "some-annotation",
+			},
+			Labels: map[string]string{
+				"app": "myapp",
 			},
 		},
-		&k8sappsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "sample-deployment",
-				Namespace: "default",
-				Annotations: map[string]string{
-					"my-annotation": "some-annotation",
-				},
-				Labels: map[string]string{
-					"app": "myapp",
-				},
-			},
-			Spec: k8sappsv1.DeploymentSpec{
-				Template: v1.PodTemplateSpec{
-					Spec: v1.PodSpec{
-						Containers: []v1.Container{
-							{
-								Name:  "someapp",
-								Image: "gcr.io/soluble-oss/someapp:latest",
-							},
+		Spec: k8sappsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name:  "someapp",
+							Image: "gcr.io/soluble-oss/someapp:latest",
 						},
 					},
 				},
 			},
 		},
-		&v1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "sample-service",
-				Namespace: "default",
-				Annotations: map[string]string{
-					"my-annotation": "some-annotation",
+	}
+
+	simpleService = v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "sample-service",
+			Namespace: "default",
+			Annotations: map[string]string{
+				"my-annotation": "some-annotation",
+			},
+		},
+		Spec: v1.ServiceSpec{
+			Ports: []v1.ServicePort{
+				{
+					Name:       "servicePortOne",
+					Port:       80,
+					TargetPort: intstr.FromInt(8080),
 				},
 			},
-			Spec: v1.ServiceSpec{
-				Ports: []v1.ServicePort{
-					{
-						Name:       "servicePortOne",
-						Port:       80,
-						TargetPort: intstr.FromInt(8080),
+			Selector: map[string]string{
+				"app": "myapp",
+			},
+		},
+	}
+
+	simpleDeploymentTapped = k8sappsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "sample-deployment",
+			Namespace:   "default",
+			Annotations: map[string]string{},
+			Labels: map[string]string{
+				"app": "myapp",
+			},
+		},
+		Spec: k8sappsv1.DeploymentSpec{
+			Template: v1.PodTemplateSpec{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{
+							Name:  "someapp",
+							Image: "gcr.io/soluble-oss/someapp:latest",
+						},
+						{
+							Name:  kubetapContainerName,
+							Image: "gcr.io/soluble-oss/kubetap-mitmproxy:latest",
+						},
 					},
-				},
-				Selector: map[string]string{
-					"app": "myapp",
+					Volumes: []v1.Volume{
+						{
+							Name: kubetapConfigMapPrefix + "sample-service",
+						},
+					},
 				},
 			},
 		},
+	}
+
+	simpleServiceTapped = v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "sample-service",
+			Namespace: "default",
+			Annotations: map[string]string{
+				annotationOriginalTargetPort: "8080",
+			},
+		},
+		Spec: v1.ServiceSpec{
+			Ports: []v1.ServicePort{
+				{
+					Name:       "servicePortOne",
+					Port:       80,
+					TargetPort: intstr.FromInt(8080),
+				},
+				{
+					Name:       kubetapServicePortName,
+					Port:       kubetapProxyWebInterfacePort,
+					TargetPort: intstr.FromInt(kubetapProxyListenPort),
+				},
+			},
+			Selector: map[string]string{
+				"app": "myapp",
+			},
+		},
+	}
+
+	simpleConfigMapTapped = v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      kubetapConfigMapPrefix + "sample-service",
+			Namespace: "default",
+			Annotations: map[string]string{
+				annotationConfigMap: configMapAnnotationPrefix + "sample-service",
+			},
+		},
+	}
+)
+
+func fakeClientUntappedSimple() *fake.Clientset {
+	namespace := simpleNamespace
+	deployment := simpleDeployment
+	service := simpleService
+	return fake.NewSimpleClientset(
+		&namespace,
+		&deployment,
+		&service,
 	)
 }
 
 func fakeClientTappedSimple() *fake.Clientset {
+	namespace := simpleNamespace
+	deployment := simpleDeploymentTapped
+	service := simpleServiceTapped
+	configMap := simpleConfigMapTapped
 	return fake.NewSimpleClientset(
-		&v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "default",
-			},
-		},
-		&k8sappsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "sample-deployment",
-				Namespace:   "default",
-				Annotations: map[string]string{},
-				Labels: map[string]string{
-					"app": "myapp",
-				},
-			},
-			Spec: k8sappsv1.DeploymentSpec{
-				Template: v1.PodTemplateSpec{
-					Spec: v1.PodSpec{
-						Containers: []v1.Container{
-							{
-								Name:  "someapp",
-								Image: "gcr.io/soluble-oss/someapp:latest",
-							},
-							{
-								Name:  kubetapContainerName,
-								Image: "gcr.io/soluble-oss/kubetap-mitmproxy:latest",
-							},
-						},
-						Volumes: []v1.Volume{
-							{
-								Name: kubetapConfigMapPrefix + "sample-deployment",
-							},
-						},
-					},
-				},
-			},
-		},
-		&v1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "sample-service",
-				Namespace: "default",
-				Annotations: map[string]string{
-					annotationOriginalTargetPort: "8080",
-				},
-			},
-			Spec: v1.ServiceSpec{
-				Ports: []v1.ServicePort{
-					{
-						Name:       "servicePortOne",
-						Port:       80,
-						TargetPort: intstr.FromInt(8080),
-					},
-					{
-						Name:       kubetapServicePortName,
-						Port:       kubetapProxyWebInterfacePort,
-						TargetPort: intstr.FromInt(kubetapProxyListenPort),
-					},
-				},
-				Selector: map[string]string{
-					"app": "myapp",
-				},
-			},
-		},
-		&v1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      kubetapConfigMapPrefix + "sample-deployment",
-				Namespace: "default",
-				Annotations: map[string]string{
-					annotationConfigMap: configMapAnnotationPrefix + "sample-service",
-				},
-			},
-		},
+		&namespace,
+		&deployment,
+		&service,
+		&configMap,
 	)
 }
 
 func fakeClientUntappedWithConfigMap() *fake.Clientset {
+	namespace := simpleNamespace
+	deployment := simpleDeployment
+	service := simpleService
+	configMap := simpleConfigMapTapped
 	return fake.NewSimpleClientset(
-		&v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "default",
-			},
-		},
-		&k8sappsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "sample-deployment",
-				Namespace:   "default",
-				Annotations: map[string]string{},
-				Labels: map[string]string{
-					"app": "myapp",
-				},
-			},
-			Spec: k8sappsv1.DeploymentSpec{
-				Template: v1.PodTemplateSpec{
-					Spec: v1.PodSpec{
-						Containers: []v1.Container{
-							{
-								Name:  "someapp",
-								Image: "gcr.io/soluble-oss/someapp:latest",
-							},
-						},
-					},
-				},
-			},
-		},
-		&v1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "sample-service",
-				Namespace:   "default",
-				Annotations: map[string]string{},
-			},
-			Spec: v1.ServiceSpec{
-				Ports: []v1.ServicePort{
-					{
-						Name:       "servicePortOne",
-						Port:       80,
-						TargetPort: intstr.FromInt(8080),
-					},
-				},
-				Selector: map[string]string{
-					"app": "myapp",
-				},
-			},
-		},
-		&v1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      kubetapConfigMapPrefix + "sample-deployment",
-				Namespace: "default",
-				Annotations: map[string]string{
-					annotationConfigMap: configMapAnnotationPrefix + "sample-service",
-				},
-			},
-		},
+		&namespace,
+		&deployment,
+		&service,
+		&configMap,
 	)
 }
 
 func fakeClientUntappedWithoutDeployment() *fake.Clientset {
+	namespace := simpleNamespace
+	service := simpleService
 	return fake.NewSimpleClientset(
-		&v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "default",
-			},
-		},
-		&v1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "sample-service",
-				Namespace:   "default",
-				Annotations: map[string]string{},
-			},
-			Spec: v1.ServiceSpec{
-				Ports: []v1.ServicePort{
-					{
-						Name:       "servicePortOne",
-						Port:       80,
-						TargetPort: intstr.FromInt(8080),
-					},
-				},
-				Selector: map[string]string{
-					"app": "myapp",
-				},
-			},
-		},
+		&namespace,
+		&service,
 	)
 }
 
-func fakeClientUntappedNoNamespace() *fake.Clientset {
+func fakeClientUntappedWithoutNamespace() *fake.Clientset {
+	deployment := simpleDeployment
+	service := simpleService
+	configMap := simpleConfigMapTapped
 	return fake.NewSimpleClientset(
-		&k8sappsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "sample-deployment",
-				Namespace:   "default",
-				Annotations: map[string]string{},
-				Labels: map[string]string{
-					"app": "myapp",
-				},
-			},
-			Spec: k8sappsv1.DeploymentSpec{
-				Template: v1.PodTemplateSpec{
-					Spec: v1.PodSpec{
-						Containers: []v1.Container{
-							{
-								Name:  "someapp",
-								Image: "gcr.io/soluble-oss/someapp:latest",
-							},
-						},
-					},
-				},
-			},
-		},
-		&v1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "sample-service",
-				Namespace:   "default",
-				Annotations: map[string]string{},
-			},
-			Spec: v1.ServiceSpec{
-				Ports: []v1.ServicePort{
-					{
-						Name:       "servicePortOne",
-						Port:       80,
-						TargetPort: intstr.FromInt(8080),
-					},
-				},
-				Selector: map[string]string{
-					"app": "myapp",
-				},
-			},
-		},
+		&deployment,
+		&service,
+		&configMap,
 	)
 }
 
 func fakeClientUntappedNoLabels() *fake.Clientset {
+	namespace := simpleNamespace
+	deployment := simpleDeployment
+	service := simpleService
+	deployment.ObjectMeta.Labels = map[string]string{}
 	return fake.NewSimpleClientset(
-		&v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "default",
-			},
-		},
-		&k8sappsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "sample-deployment",
-				Namespace:   "default",
-				Annotations: map[string]string{},
-			},
-			Spec: k8sappsv1.DeploymentSpec{
-				Template: v1.PodTemplateSpec{
-					Spec: v1.PodSpec{
-						Containers: []v1.Container{
-							{
-								Name:  "someapp",
-								Image: "gcr.io/soluble-oss/someapp:latest",
-							},
-						},
-					},
-				},
-			},
-		},
-		&v1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "sample-service",
-				Namespace:   "default",
-				Annotations: map[string]string{},
-			},
-			Spec: v1.ServiceSpec{
-				Ports: []v1.ServicePort{
-					{
-						Name:       "servicePortOne",
-						Port:       80,
-						TargetPort: intstr.FromInt(8080),
-					},
-				},
-				Selector: map[string]string{
-					"app": "myapp",
-				},
-			},
-		},
+		&namespace,
+		&deployment,
+		&service,
 	)
 }
 
 func fakeClientUntappedNoSelectors() *fake.Clientset {
+	namespace := simpleNamespace
+	deployment := simpleDeployment
+	service := simpleService
+	service.Spec.Selector = map[string]string{}
 	return fake.NewSimpleClientset(
-		&v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "default",
-			},
-		},
-		&k8sappsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "sample-deployment",
-				Namespace:   "default",
-				Annotations: map[string]string{},
-				Labels: map[string]string{
-					"app": "myapp",
-				},
-			},
-			Spec: k8sappsv1.DeploymentSpec{
-				Template: v1.PodTemplateSpec{
-					Spec: v1.PodSpec{
-						Containers: []v1.Container{
-							{
-								Name:  "someapp",
-								Image: "gcr.io/soluble-oss/someapp:latest",
-							},
-						},
-					},
-				},
-			},
-		},
-		&v1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "sample-service",
-				Namespace:   "default",
-				Annotations: map[string]string{},
-			},
-			Spec: v1.ServiceSpec{
-				Ports: []v1.ServicePort{
-					{
-						Name:       "servicePortOne",
-						Port:       80,
-						TargetPort: intstr.FromInt(8080),
-					},
-				},
-			},
-		},
-	)
-}
-
-func fakeClientUntappedMultiSelectorMatch() *fake.Clientset {
-	return fake.NewSimpleClientset(
-		&v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "default",
-			},
-		},
-		&k8sappsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "sample-deployment",
-				Namespace:   "default",
-				Annotations: map[string]string{},
-				Labels: map[string]string{
-					"app": "myapp",
-					"foo": "bar",
-				},
-			},
-			Spec: k8sappsv1.DeploymentSpec{
-				Template: v1.PodTemplateSpec{
-					Spec: v1.PodSpec{
-						Containers: []v1.Container{
-							{
-								Name:  "someapp",
-								Image: "gcr.io/soluble-oss/someapp:latest",
-							},
-						},
-					},
-				},
-			},
-		},
-		&v1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "sample-service",
-				Namespace:   "default",
-				Annotations: map[string]string{},
-			},
-			Spec: v1.ServiceSpec{
-				Ports: []v1.ServicePort{
-					{
-						Name:       "servicePortOne",
-						Port:       80,
-						TargetPort: intstr.FromInt(8080),
-					},
-				},
-				Selector: map[string]string{
-					"app": "myapp",
-					"foo": "bar",
-				},
-			},
-		},
-	)
-}
-
-func fakeClientUntappedMultiSelectorPartialMatch() *fake.Clientset {
-	return fake.NewSimpleClientset(
-		&v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "default",
-			},
-		},
-		&k8sappsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "sample-deployment",
-				Namespace:   "default",
-				Annotations: map[string]string{},
-				Labels: map[string]string{
-					"app": "myapp",
-				},
-			},
-			Spec: k8sappsv1.DeploymentSpec{
-				Template: v1.PodTemplateSpec{
-					Spec: v1.PodSpec{
-						Containers: []v1.Container{
-							{
-								Name:  "someapp",
-								Image: "gcr.io/soluble-oss/someapp:latest",
-							},
-						},
-					},
-				},
-			},
-		},
-		&v1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "sample-service",
-				Namespace:   "default",
-				Annotations: map[string]string{},
-			},
-			Spec: v1.ServiceSpec{
-				Ports: []v1.ServicePort{
-					{
-						Name:       "servicePortOne",
-						Port:       80,
-						TargetPort: intstr.FromInt(8080),
-					},
-				},
-				Selector: map[string]string{
-					"app": "myapp",
-					"foo": "bar",
-				},
-			},
-		},
+		&namespace,
+		&deployment,
+		&service,
 	)
 }
 
 func fakeClientUntappedMultiDeploymentMatch() *fake.Clientset {
+	namespace := simpleNamespace
+	deployment := simpleDeployment
+	deploymentTwo := simpleDeployment
+	deploymentTwo.Name = "two"
+	service := simpleService
 	return fake.NewSimpleClientset(
-		&v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "default",
-			},
-		},
-		&k8sappsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "sample-deployment",
-				Namespace:   "default",
-				Annotations: map[string]string{},
-				Labels: map[string]string{
-					"app": "myapp",
-				},
-			},
-			Spec: k8sappsv1.DeploymentSpec{
-				Template: v1.PodTemplateSpec{
-					Spec: v1.PodSpec{
-						Containers: []v1.Container{
-							{
-								Name:  "someapp",
-								Image: "gcr.io/soluble-oss/someapp:latest",
-							},
-						},
-					},
-				},
-			},
-		},
-		&k8sappsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "different-sample-deployment",
-				Namespace:   "default",
-				Annotations: map[string]string{},
-				Labels: map[string]string{
-					"app": "myapp",
-				},
-			},
-			Spec: k8sappsv1.DeploymentSpec{
-				Template: v1.PodTemplateSpec{
-					Spec: v1.PodSpec{
-						Containers: []v1.Container{
-							{
-								Name:  "someapp",
-								Image: "gcr.io/soluble-oss/someapp:latest",
-							},
-						},
-					},
-				},
-			},
-		},
-		&v1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "sample-service",
-				Namespace:   "default",
-				Annotations: map[string]string{},
-			},
-			Spec: v1.ServiceSpec{
-				Ports: []v1.ServicePort{
-					{
-						Name:       "servicePortOne",
-						Port:       80,
-						TargetPort: intstr.FromInt(8080),
-					},
-				},
-				Selector: map[string]string{
-					"app": "myapp",
-				},
-			},
-		},
+		&namespace,
+		&deployment,
+		&deploymentTwo,
+		&service,
 	)
 }
 
 func fakeClientUntappedMatchOutsideNamespace() *fake.Clientset {
+	namespace := simpleNamespace
+	deployment := simpleDeployment
+	deployment.Namespace = "foo"
+	service := simpleService
 	return fake.NewSimpleClientset(
-		&v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "default",
-			},
-		},
-		&k8sappsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "sample-deployment",
-				Namespace:   "different-and-not-default",
-				Annotations: map[string]string{},
-				Labels: map[string]string{
-					"app": "myapp",
-				},
-			},
-			Spec: k8sappsv1.DeploymentSpec{
-				Template: v1.PodTemplateSpec{
-					Spec: v1.PodSpec{
-						Containers: []v1.Container{
-							{
-								Name:  "someapp",
-								Image: "gcr.io/soluble-oss/someapp:latest",
-							},
-						},
-					},
-				},
-			},
-		},
-		&v1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        "sample-service",
-				Namespace:   "default",
-				Annotations: map[string]string{},
-			},
-			Spec: v1.ServiceSpec{
-				Ports: []v1.ServicePort{
-					{
-						Name:       "servicePortOne",
-						Port:       80,
-						TargetPort: intstr.FromInt(8080),
-					},
-				},
-				Selector: map[string]string{
-					"app": "myapp",
-				},
-			},
-		},
+		&namespace,
+		&deployment,
+		&service,
 	)
 }
 
-func fakeClientTappedNilAnnotations() *fake.Clientset {
+func fakeClientTappedWithoutAnnotations() *fake.Clientset {
+	namespace := simpleNamespace
+	deployment := simpleDeploymentTapped
+	service := simpleServiceTapped
+	deployment.Annotations = map[string]string{}
+	service.Annotations = map[string]string{}
 	return fake.NewSimpleClientset(
-		&v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "default",
-			},
-		},
-		&k8sappsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "sample-deployment",
-				Namespace: "default",
-				Labels: map[string]string{
-					"app": "myapp",
-				},
-			},
-			Spec: k8sappsv1.DeploymentSpec{
-				Template: v1.PodTemplateSpec{
-					Spec: v1.PodSpec{
-						Containers: []v1.Container{
-							{
-								Name:  "someapp",
-								Image: "gcr.io/soluble-oss/someapp:latest",
-							},
-							{
-								Name:  kubetapContainerName,
-								Image: "gcr.io/soluble-oss/kubetap-mitmproxy:latest",
-							},
-						},
-						Volumes: []v1.Volume{
-							{
-								Name: kubetapConfigMapPrefix + "sample-deployment",
-							},
-						},
-					},
-				},
-			},
-		},
-		&v1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "sample-service",
-				Namespace: "default",
-			},
-			Spec: v1.ServiceSpec{
-				Ports: []v1.ServicePort{
-					{
-						Name:       "servicePortOne",
-						Port:       80,
-						TargetPort: intstr.FromInt(8080),
-					},
-					{
-						Name:       kubetapServicePortName,
-						Port:       kubetapProxyWebInterfacePort,
-						TargetPort: intstr.FromInt(kubetapProxyListenPort),
-					},
-				},
-				Selector: map[string]string{
-					"app": "myapp",
-				},
-			},
-		},
-		&v1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      kubetapConfigMapPrefix + "sample-deployment",
-				Namespace: "default",
-			},
-		},
+		&namespace,
+		&deployment,
+		&service,
 	)
 }
 
 func fakeClientUntappedNamedPorts() *fake.Clientset {
+	namespace := simpleNamespace
+	deployment := simpleDeployment
+	service := simpleService
+	var ports []v1.ServicePort
+	for _, p := range service.Spec.Ports {
+		p.TargetPort = intstr.FromString(kubetapPortName)
+		ports = append(ports, p)
+	}
+	service.Spec.Ports = ports
 	return fake.NewSimpleClientset(
-		&v1.Namespace{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "default",
-			},
-		},
-		&k8sappsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "sample-deployment",
-				Namespace: "default",
-				Annotations: map[string]string{
-					"my-annotation": "some-annotation",
-				},
-				Labels: map[string]string{
-					"app": "myapp",
-				},
-			},
-			Spec: k8sappsv1.DeploymentSpec{
-				Template: v1.PodTemplateSpec{
-					Spec: v1.PodSpec{
-						Containers: []v1.Container{
-							{
-								Name:  "someapp",
-								Image: "gcr.io/soluble-oss/someapp:latest",
-								Ports: []v1.ContainerPort{
-									{
-										Name:          kubetapPortName,
-										ContainerPort: kubetapProxyListenPort,
-										Protocol:      v1.ProtocolTCP,
-									},
-									{
-										Name:          kubetapWebPortName,
-										ContainerPort: kubetapProxyWebInterfacePort,
-										Protocol:      v1.ProtocolTCP,
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-		&v1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "sample-service",
-				Namespace: "default",
-				Annotations: map[string]string{
-					"my-annotation": "some-annotation",
-				},
-			},
-			Spec: v1.ServiceSpec{
-				Ports: []v1.ServicePort{
-					{
-						Name:       "servicePortOne",
-						Port:       80,
-						TargetPort: intstr.FromString(kubetapPortName),
-					},
-				},
-				Selector: map[string]string{
-					"app": "myapp",
-				},
-			},
-		},
+		&namespace,
+		&deployment,
+		&service,
+	)
+}
+
+func fakeClientTappedNamedPorts() *fake.Clientset {
+	namespace := simpleNamespace
+	deployment := simpleDeploymentTapped
+	service := simpleServiceTapped
+	var ports []v1.ServicePort
+	for _, p := range service.Spec.Ports {
+		if p.Name != simpleService.Spec.Ports[0].Name {
+			continue
+		}
+		p.TargetPort = intstr.FromString(kubetapPortName)
+		ports = append(ports, p)
+	}
+	service.Spec.Ports = ports
+	return fake.NewSimpleClientset(
+		&namespace,
+		&deployment,
+		&service,
+	)
+}
+
+func fakeClientUntappedNoPortName() *fake.Clientset {
+	namespace := simpleNamespace
+	deployment := simpleDeployment
+	service := simpleService
+	var ports []v1.ServicePort
+	for _, p := range service.Spec.Ports {
+		p.Name = ""
+		ports = append(ports, p)
+	}
+	service.Spec.Ports = ports
+	return fake.NewSimpleClientset(
+		&namespace,
+		&deployment,
+		&service,
 	)
 }

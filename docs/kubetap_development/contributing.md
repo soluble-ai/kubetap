@@ -21,8 +21,7 @@ $ git commit -s -m 'This is my commit message'
 
 * The `master` branch should be safe to deploy at any time, with the understanding
 that while safe, it is less tested than a tagged release.
-* Merge commits are ugly and not necessary.
-* All commits should be squashed with an appropriate commit message prior to merge
-into master.
 * All commits to the `master` branch should be cryptographically signed.
+* All commits should be squashed with an appropriate commit message prior to merge.
+* Merge commits are ugly and not necessary.
 * `git config --global pull.rebase = true`

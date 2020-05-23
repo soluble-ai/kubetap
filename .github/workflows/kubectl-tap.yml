@@ -1,7 +1,11 @@
 name: kubectl-tap
 on:
   push:
+    # trigger on push to master
     branches: [master]
+    # and on semver tag
+    tags:
+      - v*.*.*
 
 jobs:
   build:
@@ -42,7 +46,7 @@ jobs:
 
   docker-build-scratch:
     timeout-minutes: 10
-    name: Build and push kubectl-tap to GCR
+    name: gcr.io/soluble-oss/kubectl-tap:latest
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -63,7 +67,7 @@ jobs:
 
   docker-build-alpine:
     timeout-minutes: 10
-    name: Build and push kubectl-tap to GCR
+    name: gcr.io/soluble-oss/kubectl-tap:alpine
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -103,8 +107,9 @@ jobs:
       with:
         fetch-depth: 0
     - 
-      name: Unshallow for goreleaser
-      run: git fetch --prune --unshallow
+      #name: Unshallow for goreleaser
+      name: Fetch for goreleaser
+      run: git fetch --prune
     - 
       name: Build
       run: ./scripts/build.zsh
@@ -123,6 +128,5 @@ jobs:
       with:
         formula-name: kubetap
         homebrew-tap: soluble-ai/homebrew-kubetap
-        branch: master
       env:
         COMMITTER_TOKEN: ${{ secrets.SOLUBLE_KUBETAP_BOT_TOKEN }}

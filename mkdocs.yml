@@ -1,5 +1,5 @@
 site_name: kubetap
-site_description: 'Kubetap - kubectl plugin to proxy Kubernetes Services with ease'
+site_description: 'Kubetap - kubectl plugin to interactively proxy Kubernetes Services with ease'
 repo_name: 'soluble-ai/kubetap'
 repo_url: https://github.com/soluble-ai/kubetap
 copyright: 'Copyright &copy; 2020 Soluble'

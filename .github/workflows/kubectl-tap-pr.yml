@@ -29,6 +29,9 @@ jobs:
       name: Checkout
       uses: actions/checkout@v2
     - 
+      name: Build
+      run: ./scripts/build.zsh
+    - 
       name: Unit Test
       run: ./scripts/test.zsh
     - 
