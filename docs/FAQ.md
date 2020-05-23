@@ -9,7 +9,7 @@ which makes Go v1.13 the minimum build target.
 
 You can check the current Go version by running:
 
-```
+```sh
 $ go version
 go version go1.14.2 darwin/amd64
 ```
@@ -42,3 +42,8 @@ your `${PATH}`. Try adding the following line to your `.bashrc` or
 ```sh
 export PATH="${GOPATH}/bin:${PATH}"
 ```
+
+### The Mac OS Binary doesn't run
+
+Mac binaries require notarization. It is recommended to use Homebrew to install
+Kubetap on Mac, or to build from source.

@@ -41,7 +41,7 @@ the link, [@rakyll](https://github.com/rakyll)!
 
 ### Sidecar yaml
 
-* Optionally ingest sidecar configuration through yaml file.
+* Optionally ingest sidecar configuration through a JSON/Yaml file.
   * This should be an optional feature, and will likely only be necessary for
   those few environments that require special configuration to function. We would
   like to support these environments, but in that case it's up to the operator
