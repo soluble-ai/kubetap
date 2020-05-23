@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/pkg/browser"
+	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	k8sappsv1 "k8s.io/api/apps/v1"
@@ -310,14 +311,25 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 			time.Sleep(5 * time.Second)
 			s <- struct{}{}
 		}()
-		fmt.Fprintf(cmd.OutOrStdout(), "Waiting for Pod containers to become ready...")
+		bar := progressbar.NewOptions(interactiveTimeoutSeconds,
+			progressbar.OptionThrottle(100*time.Millisecond),
+			progressbar.OptionClearOnFinish(),
+			progressbar.OptionSetPredictTime(false),
+			progressbar.OptionSetWriter(cmd.OutOrStderr()),
+			progressbar.OptionSetWidth(30),
+			progressbar.OptionSetDescription("[reset] Waiting for Pod containers to become ready..."),
+			progressbar.OptionOnCompletion(func() {
+				fmt.Fprintf(cmd.OutOrStderr(), "\n")
+			}),
+		)
 		var ready bool
 		for i := 0; i < interactiveTimeoutSeconds; i++ {
+			_ = bar.Add(1)
 			if ready {
+				_ = bar.Finish()
 				break
 			}
 			time.Sleep(1 * time.Second)
-			fmt.Fprintf(cmd.OutOrStdout(), ".")
 			select {
 			case <-time.After(1 * time.Nanosecond):
 				// if not ready this cycle, abort
