@@ -302,37 +302,50 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 		}()
 
 		podsClient := client.CoreV1().Pods(namespace)
+		s := make(chan struct{})
+		defer close(s)
+		go func() {
+			// Skip the first few checks to give pods time to come up.
+			// Race: If the first few cycles are not skipped, the condition status may be "Ready".
+			time.Sleep(5 * time.Second)
+			s <- struct{}{}
+		}()
 		fmt.Fprintf(cmd.OutOrStdout(), "Waiting for Pod containers to become ready...")
+		var ready bool
 		for i := 0; i < interactiveTimeoutSeconds; i++ {
-			time.Sleep(1 * time.Second)
-			fmt.Fprintf(cmd.OutOrStdout(), ".")
-			// skip the first few checks to give pods time to come up
-			if i < 5 {
-				continue
-			}
-			dp, err := deploymentFromSelectors(deploymentsClient, targetService.Spec.Selector)
-			if err != nil {
-				return err
-			}
-			pod, err := kubetapPod(podsClient, dp.Name)
-			if err != nil {
-				return err
-			}
-			var ready bool
-			for _, cond := range pod.Status.Conditions {
-				if cond.Type == "ContainersReady" {
-					if cond.Status == "True" {
-						ready = true
-					}
-				}
-			}
 			if ready {
 				break
 			}
-			if i == interactiveTimeoutSeconds-1 {
-				fmt.Fprintf(cmd.OutOrStdout(), ".\n\n")
-				die("Pod not running after 90 seconds. Cancelling port-forward, tap still active.")
+			time.Sleep(1 * time.Second)
+			fmt.Fprintf(cmd.OutOrStdout(), ".")
+			select {
+			case <-time.After(1 * time.Nanosecond):
+				// if not ready this cycle, abort
+				continue
+			case <-s:
+				dp, err := deploymentFromSelectors(deploymentsClient, targetService.Spec.Selector)
+				if err != nil {
+					return err
+				}
+				pod, err := kubetapPod(podsClient, dp.Name)
+				if err != nil {
+					return err
+				}
+				for _, cond := range pod.Status.Conditions {
+					if cond.Type == "ContainersReady" {
+						if cond.Status == "True" {
+							ready = true
+						}
+					}
+				}
+				go func() {
+					s <- struct{}{}
+				}()
 			}
+		}
+		if !ready {
+			fmt.Fprintf(cmd.OutOrStdout(), ".\n\n")
+			die("Pod not running after 90 seconds. Cancelling port-forward, tap still active.")
 		}
 		dp, err := deploymentFromSelectors(deploymentsClient, targetService.Spec.Selector)
 		if err != nil {
