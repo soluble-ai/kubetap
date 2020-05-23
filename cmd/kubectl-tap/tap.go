@@ -66,6 +66,11 @@ web_open_browser: false
 
 	interactiveTimeoutSeconds = 90
 	configMapAnnotationPrefix = "target-"
+
+	protocolHTTP Protocol = "http"
+	//protocolTCP = "tcp"
+	//protocolUDP = "udp"
+	//protocolGRPC = "grpc"
 )
 
 var (
@@ -81,12 +86,17 @@ var (
 	ErrCreateResourceMismatch     = errors.New("the created resource did not match the desired state")
 )
 
+// Protocol is a supported tap method, and ultimately determines what container
+// is injected as a sidecar.
+type Protocol string
+
 // ProxyOptions are options used to configure the mitmproxy configmap
 // We will eventually provide explicit support for modes, and methods
 // which validate the configuration for a given mode will likely exist
 // in the future.
 type ProxyOptions struct {
 	Target        string
+	Protocol      Protocol
 	UpstreamHTTPS bool
 	UpstreamPort  string
 	Mode          string
@@ -143,23 +153,6 @@ func NewListCommand(client kubernetes.Interface, viper *viper.Viper) func(*cobra
 	}
 }
 
-// hasNamespace checks if a given Namespace exists.
-func hasNamespace(client kubernetes.Interface, namespace string) (bool, error) {
-	if namespace == "" {
-		return false, os.ErrInvalid
-	}
-	ns, err := client.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		return false, err
-	}
-	for _, n := range ns.Items {
-		if n.Name == namespace {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 // NewTapCommand identifies a target employment through service selectors and modifies that
 // deployment to add a mitmproxy sidecar and configmap, then adjusts the service targetPort
 // to point to the mitmproxy sidecar. Mitmproxy's ConfigMap sets the upstream to the original
@@ -168,12 +161,19 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 	return func(cmd *cobra.Command, args []string) error {
 		targetSvcName := args[0]
 
+		protocol := viper.GetString("protocol")
 		targetSvcPort := viper.GetInt32("proxyPort")
 		namespace := viper.GetString("namespace")
 		image := viper.GetString("proxyImage")
 		https := viper.GetBool("https")
 		portForward := viper.GetBool("portForward")
 		openBrowser := viper.GetBool("browser")
+		if Protocol(protocol) != protocolHTTP {
+			// only automatically adjust the image if it hasn't been overridden
+			if image == defaultImageHTTP { //nolint: staticcheck
+				//TODO: set image by protocol type
+			}
+		}
 		if openBrowser {
 			portForward = true
 		}
@@ -832,4 +832,21 @@ func untapSvc(svcClient corev1.ServiceInterface, svcName string) error {
 		return fmt.Errorf("failed to untap Service: %w", retryErr)
 	}
 	return nil
+}
+
+// hasNamespace checks if a given Namespace exists.
+func hasNamespace(client kubernetes.Interface, namespace string) (bool, error) {
+	if namespace == "" {
+		return false, os.ErrInvalid
+	}
+	ns, err := client.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return false, err
+	}
+	for _, n := range ns.Items {
+		if n.Name == namespace {
+			return true, nil
+		}
+	}
+	return false, nil
 }
