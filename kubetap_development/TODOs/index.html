@@ -367,60 +367,6 @@
     Features
   </a>
   
-    <nav class="md-nav" aria-label="Features">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#raw-capture" class="md-nav__link">
-    Raw capture
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#burp-mode" class="md-nav__link">
-    "Burp" mode
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#grpc-support" class="md-nav__link">
-    gRPC support
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#sidecar-yaml" class="md-nav__link">
-    Sidecar yaml
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#architecture" class="md-nav__link">
-    Architecture
-  </a>
-  
-    <nav class="md-nav" aria-label="Architecture">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#use-ephemeral-containers-once-in-beta" class="md-nav__link">
-    Use Ephemeral Containers once in beta
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
 </li>
       
     </ul>
@@ -513,60 +459,6 @@
     Features
   </a>
   
-    <nav class="md-nav" aria-label="Features">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#raw-capture" class="md-nav__link">
-    Raw capture
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#burp-mode" class="md-nav__link">
-    "Burp" mode
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#grpc-support" class="md-nav__link">
-    gRPC support
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#sidecar-yaml" class="md-nav__link">
-    Sidecar yaml
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#architecture" class="md-nav__link">
-    Architecture
-  </a>
-  
-    <nav class="md-nav" aria-label="Architecture">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#use-ephemeral-containers-once-in-beta" class="md-nav__link">
-    Use Ephemeral Containers once in beta
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
 </li>
       
     </ul>
@@ -587,59 +479,7 @@
                 
                 <h1 id="todos">TODOs</h1>
 <h2 id="features">Features</h2>
-<h3 id="raw-capture">Raw capture</h3>
-<p>TCP/UDP capture to pcap.</p>
-<ul>
-<li>looks like there's already a <a href="https://github.com/eldadru/ksniff">kubectl plugin</a>
-for this, but the implementation by uploading binaries into running Pods is not ideal:</li>
-</ul>
-<blockquote>
-<p>ksniff use kubectl to upload a statically compiled tcpdump binary to your pod
-and redirecting it's output to your local Wireshark for smooth network debugging
-experience.</p>
-</blockquote>
-<ul>
-<li>
-<p>Correct implementation non-trivial, as it involves multi-process management,
-potentially modifying the security context to allow capture, and exporting data
-to the client.</p>
-</li>
-<li>
-<p>Data export implementation still undecided, options under consideration:</p>
-</li>
-<li>tcpdump + ( FF Send || S3 || PVC || kubectl-tap client stream )</li>
-<li>webshark interactive interface (<a href="https://bitbucket.org/jwzawadzki/webshark/src">stale project</a>)</li>
-</ul>
-<h3 id="burp-mode">"Burp" mode</h3>
-<ul>
-<li>"Blocked" by <a href="https://github.com/kubernetes/kubernetes/issues/20227">kubernetes/kubernetes#20227</a></li>
-<li>Reverse-proxy from container to host using native Kubernetes tools is ideal,
-  but there are alternatives to consider in the interim such as <a href="https://github.com/omrikiei/ktunnel">ktunnel</a></li>
-<li>Once raw capture feature is added, implementing our own tunnel is significantly
-less of a challenge.</li>
-</ul>
-<h3 id="grpc-support">gRPC support</h3>
-<p>There is a nice proxy library <a href="https://github.com/mwitkow/grpc-proxy">here</a>, by mwitkow.
-It should be feasible to use this to route traffic to an operator. Thanks for
-the link, <a href="https://github.com/rakyll">@rakyll</a>!</p>
-<ul>
-<li>To be useful, this needs to provide a proxy flow list, plus a "repeater" interface.</li>
-<li>as far as I know, this tool doesn't exist. There is <a href="https://github.com/fullstorydev/grpcurl">grpcurl</a>,
-  but this doesn't provide proxy flow-through.</li>
-</ul>
-<h3 id="sidecar-yaml">Sidecar yaml</h3>
-<ul>
-<li>Optionally ingest sidecar configuration through a JSON/Yaml file.</li>
-<li>This should be an optional feature, and will likely only be necessary for
-  those few environments that require special configuration to function. We would
-  like to support these environments, but in that case it's up to the operator
-  to configure. Allowing yaml sidecar definition is the path to enable that.</li>
-</ul>
-<h2 id="architecture">Architecture</h2>
-<h3 id="use-ephemeral-containers-once-in-beta">Use Ephemeral Containers once in beta</h3>
-<p>Don't want to force alpha features on anyone, but once this is in beta this will
-probably be the way forward. Will revisit.</p>
-<p>https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers/</p>
+<p>Feature requests are recorded on GitHub and <a href="https://github.com/soluble-ai/kubetap/issues?q=is%3Aopen+is%3Aissue+label%3Afeature">available here</a></p>
                 
               
               
