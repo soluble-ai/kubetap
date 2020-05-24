@@ -14,7 +14,7 @@
 Kubetap is a kubectl plugin that enables an operator to easily deploy intercepting
 proxies for Kubernetes Services.
 
-[Here is a video and presentation and demo of the project][video].
+[Here is a video presentation and demo of the project][video].
 
 ## Why Kubetap?
 
