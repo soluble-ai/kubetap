@@ -37,6 +37,8 @@ const (
 	annotationIsTapped           = "kubetap.io/tapped"
 
 	defaultImageHTTP = "gcr.io/soluble-oss/kubetap-mitmproxy:latest"
+	defaultImageRaw  = "gcr.io/soluble-oss/kubetap-raw:latest"
+	defaultImageGRPC = "gcr.io/soluble-oss/kubetap-grpc:latest"
 )
 
 // die exit the program, printing the error.

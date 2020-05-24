@@ -69,9 +69,9 @@ web_open_browser: false
 	configMapAnnotationPrefix = "target-"
 
 	protocolHTTP Protocol = "http"
-	//protocolTCP = "tcp"
-	//protocolUDP = "udp"
-	//protocolGRPC = "grpc"
+	protocolTCP  Protocol = "tcp"
+	protocolUDP  Protocol = "udp"
+	protocolGRPC Protocol = "grpc"
 )
 
 var (
@@ -81,10 +81,11 @@ var (
 	ErrServiceSelectorNoMatch     = errors.New("the Service selector did not match any Deployments")
 	ErrServiceSelectorMultiMatch  = errors.New("the Service selector matched multiple Deployments")
 	ErrDeploymentOutsideNamespace = errors.New("the Service selector matched Deployment outside the specified Namespace")
-	ErrNoSelectors                = errors.New("no selectors are set for the target Service")
+	ErrSelectorsMissing           = errors.New("no selectors are set for the target Service")
 	ErrConfigMapNoMatch           = errors.New("the ConfigMap list did not match any ConfigMaps")
 	ErrKubetapPodNoMatch          = errors.New("a Kubetap Pod was not found")
 	ErrCreateResourceMismatch     = errors.New("the created resource did not match the desired state")
+	ErrDeploymentMissingPorts     = errors.New("error resolving Service port number by name from Deployment")
 )
 
 // Protocol is a supported tap method, and ultimately determines what container
@@ -171,8 +172,18 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 		openBrowser := viper.GetBool("browser")
 		if Protocol(protocol) != protocolHTTP {
 			// only automatically adjust the image if it hasn't been overridden
-			if image == defaultImageHTTP { //nolint: staticcheck
-				//TODO: set image by protocol type
+			if image == defaultImageHTTP {
+				switch Protocol(protocol) {
+				case protocolTCP, protocolUDP:
+					//TODO: make this container and remove error
+					image = defaultImageRaw
+					return fmt.Errorf("mode %q is currently not supported", image)
+				case protocolGRPC:
+					//TODO: make this container and remove error
+					image = defaultImageGRPC
+					return fmt.Errorf("mode %q is currently not supported", image)
+				}
+				viper.Set("proxyImage", image)
 			}
 		}
 		if openBrowser {
@@ -237,6 +248,9 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 							proxyOpts.UpstreamPort = strconv.Itoa(int(p.ContainerPort))
 						}
 					}
+				}
+				if proxyOpts.UpstreamPort == "" {
+					return ErrDeploymentMissingPorts
 				}
 			}
 		}
@@ -547,7 +561,7 @@ func deploymentFromSelectors(deploymentsClient appsv1.DeploymentInterface, selec
 	var sel string
 	switch len(selectors) {
 	case 0:
-		return k8sappsv1.Deployment{}, ErrNoSelectors
+		return k8sappsv1.Deployment{}, ErrSelectorsMissing
 	case 1:
 		for k, v := range selectors {
 			sel = k + "=" + v
@@ -707,8 +721,7 @@ func destroySidecars(deploymentsClient appsv1.DeploymentInterface, selectors map
 		return err
 	}
 	if dpl.Namespace != namespace {
-		// NOTE: this code path should never trigger, essentially a panic()
-		return ErrDeploymentOutsideNamespace
+		panic(ErrDeploymentOutsideNamespace)
 	}
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		deployment, getErr := deploymentsClient.Get(context.TODO(), dpl.Name, metav1.GetOptions{})

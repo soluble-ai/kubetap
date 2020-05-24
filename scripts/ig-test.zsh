@@ -72,7 +72,7 @@ for chart in ${_kubetap_helm_charts[@]}; do
   sleep 20
 
   _kubetap_ready_state=""
-  for ((i=0; i <= 20; i++)); do
+  for i in {0..20}; do
     sleep 6
     _kubetap_pod=($(kubectl --context kind-kubetap get pods -ojsonpath='{.items[*].metadata.name}'))
     if (( ${#_kubetap_pod} != 1 )); then
@@ -87,7 +87,7 @@ for chart in ${_kubetap_helm_charts[@]}; do
     echo "container did not come up within 90 seconds"
     return 1
   fi
-  unset _kubetap_pod _kubetap_ready_state
+  unset _kubetap_pod _kubetap_ready_state i
 
   sleep 1
   kubectl port-forward svc/${_kubetap_service} -n default 2244:2244 &
