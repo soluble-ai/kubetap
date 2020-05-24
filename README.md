@@ -14,6 +14,8 @@
 Kubetap is a kubectl plugin that enables an operator to easily deploy intercepting
 proxies for Kubernetes Services.
 
+[Here is a video and presentation and demo of the project][video].
+
 ## Why Kubetap?
 
 Kubetap arose from a need to quickly and efficiently proxy Kubernetes Services
@@ -145,3 +147,4 @@ This project was created to compliment the [Soluble platform][soluble].
 [go-version]: https://github.com/soluble-ai/kubetap/blob/master/go.mod
 [latest-release]: https://github.com/soluble-ai/kubetap/releases
 [build-status]: https://github.com/soluble-ai/kubetap/actions
+[video]: https://www.youtube.com/watch?v=hBroFtlxvkM
