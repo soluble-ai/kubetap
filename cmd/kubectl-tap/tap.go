@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/pkg/browser"
+	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	k8sappsv1 "k8s.io/api/apps/v1"
@@ -66,6 +67,11 @@ web_open_browser: false
 
 	interactiveTimeoutSeconds = 90
 	configMapAnnotationPrefix = "target-"
+
+	protocolHTTP Protocol = "http"
+	protocolTCP  Protocol = "tcp"
+	protocolUDP  Protocol = "udp"
+	protocolGRPC Protocol = "grpc"
 )
 
 var (
@@ -75,11 +81,16 @@ var (
 	ErrServiceSelectorNoMatch     = errors.New("the Service selector did not match any Deployments")
 	ErrServiceSelectorMultiMatch  = errors.New("the Service selector matched multiple Deployments")
 	ErrDeploymentOutsideNamespace = errors.New("the Service selector matched Deployment outside the specified Namespace")
-	ErrNoSelectors                = errors.New("no selectors are set for the target Service")
+	ErrSelectorsMissing           = errors.New("no selectors are set for the target Service")
 	ErrConfigMapNoMatch           = errors.New("the ConfigMap list did not match any ConfigMaps")
 	ErrKubetapPodNoMatch          = errors.New("a Kubetap Pod was not found")
 	ErrCreateResourceMismatch     = errors.New("the created resource did not match the desired state")
+	ErrDeploymentMissingPorts     = errors.New("error resolving Service port number by name from Deployment")
 )
+
+// Protocol is a supported tap method, and ultimately determines what container
+// is injected as a sidecar.
+type Protocol string
 
 // ProxyOptions are options used to configure the mitmproxy configmap
 // We will eventually provide explicit support for modes, and methods
@@ -87,6 +98,7 @@ var (
 // in the future.
 type ProxyOptions struct {
 	Target        string
+	Protocol      Protocol
 	UpstreamHTTPS bool
 	UpstreamPort  string
 	Mode          string
@@ -143,23 +155,6 @@ func NewListCommand(client kubernetes.Interface, viper *viper.Viper) func(*cobra
 	}
 }
 
-// hasNamespace checks if a given Namespace exists.
-func hasNamespace(client kubernetes.Interface, namespace string) (bool, error) {
-	if namespace == "" {
-		return false, os.ErrInvalid
-	}
-	ns, err := client.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		return false, err
-	}
-	for _, n := range ns.Items {
-		if n.Name == namespace {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 // NewTapCommand identifies a target employment through service selectors and modifies that
 // deployment to add a mitmproxy sidecar and configmap, then adjusts the service targetPort
 // to point to the mitmproxy sidecar. Mitmproxy's ConfigMap sets the upstream to the original
@@ -168,12 +163,29 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 	return func(cmd *cobra.Command, args []string) error {
 		targetSvcName := args[0]
 
+		protocol := viper.GetString("protocol")
 		targetSvcPort := viper.GetInt32("proxyPort")
 		namespace := viper.GetString("namespace")
 		image := viper.GetString("proxyImage")
 		https := viper.GetBool("https")
 		portForward := viper.GetBool("portForward")
 		openBrowser := viper.GetBool("browser")
+		if Protocol(protocol) != protocolHTTP {
+			// only automatically adjust the image if it hasn't been overridden
+			if image == defaultImageHTTP {
+				switch Protocol(protocol) {
+				case protocolTCP, protocolUDP:
+					//TODO: make this container and remove error
+					image = defaultImageRaw
+					return fmt.Errorf("mode %q is currently not supported", image)
+				case protocolGRPC:
+					//TODO: make this container and remove error
+					image = defaultImageGRPC
+					return fmt.Errorf("mode %q is currently not supported", image)
+				}
+				viper.Set("proxyImage", image)
+			}
+		}
 		if openBrowser {
 			portForward = true
 		}
@@ -236,6 +248,9 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 							proxyOpts.UpstreamPort = strconv.Itoa(int(p.ContainerPort))
 						}
 					}
+				}
+				if proxyOpts.UpstreamPort == "" {
+					return ErrDeploymentMissingPorts
 				}
 			}
 		}
@@ -302,37 +317,61 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 		}()
 
 		podsClient := client.CoreV1().Pods(namespace)
-		fmt.Fprintf(cmd.OutOrStdout(), "Waiting for Pod containers to become ready...")
+		s := make(chan struct{})
+		defer close(s)
+		go func() {
+			// Skip the first few checks to give pods time to come up.
+			// Race: If the first few cycles are not skipped, the condition status may be "Ready".
+			time.Sleep(5 * time.Second)
+			s <- struct{}{}
+		}()
+		bar := progressbar.NewOptions(interactiveTimeoutSeconds,
+			progressbar.OptionThrottle(100*time.Millisecond),
+			progressbar.OptionClearOnFinish(),
+			progressbar.OptionSetPredictTime(false),
+			progressbar.OptionSetWriter(cmd.OutOrStderr()),
+			progressbar.OptionSetWidth(30),
+			progressbar.OptionSetDescription("[reset] Waiting for Pod containers to become ready..."),
+			progressbar.OptionOnCompletion(func() {
+				fmt.Fprintf(cmd.OutOrStderr(), "\n")
+			}),
+		)
+		var ready bool
 		for i := 0; i < interactiveTimeoutSeconds; i++ {
-			time.Sleep(1 * time.Second)
-			fmt.Fprintf(cmd.OutOrStdout(), ".")
-			// skip the first few checks to give pods time to come up
-			if i < 5 {
-				continue
-			}
-			dp, err := deploymentFromSelectors(deploymentsClient, targetService.Spec.Selector)
-			if err != nil {
-				return err
-			}
-			pod, err := kubetapPod(podsClient, dp.Name)
-			if err != nil {
-				return err
-			}
-			var ready bool
-			for _, cond := range pod.Status.Conditions {
-				if cond.Type == "ContainersReady" {
-					if cond.Status == "True" {
-						ready = true
-					}
-				}
-			}
+			_ = bar.Add(1)
 			if ready {
+				_ = bar.Finish()
 				break
 			}
-			if i == interactiveTimeoutSeconds-1 {
-				fmt.Fprintf(cmd.OutOrStdout(), ".\n\n")
-				die("Pod not running after 90 seconds. Cancelling port-forward, tap still active.")
+			time.Sleep(1 * time.Second)
+			select {
+			case <-time.After(1 * time.Nanosecond):
+				// if not ready this cycle, abort
+				continue
+			case <-s:
+				dp, err := deploymentFromSelectors(deploymentsClient, targetService.Spec.Selector)
+				if err != nil {
+					return err
+				}
+				pod, err := kubetapPod(podsClient, dp.Name)
+				if err != nil {
+					return err
+				}
+				for _, cond := range pod.Status.Conditions {
+					if cond.Type == "ContainersReady" {
+						if cond.Status == "True" {
+							ready = true
+						}
+					}
+				}
+				go func() {
+					s <- struct{}{}
+				}()
 			}
+		}
+		if !ready {
+			fmt.Fprintf(cmd.OutOrStdout(), ".\n\n")
+			die("Pod not running after 90 seconds. Cancelling port-forward, tap still active.")
 		}
 		dp, err := deploymentFromSelectors(deploymentsClient, targetService.Spec.Selector)
 		if err != nil {
@@ -522,7 +561,7 @@ func deploymentFromSelectors(deploymentsClient appsv1.DeploymentInterface, selec
 	var sel string
 	switch len(selectors) {
 	case 0:
-		return k8sappsv1.Deployment{}, ErrNoSelectors
+		return k8sappsv1.Deployment{}, ErrSelectorsMissing
 	case 1:
 		for k, v := range selectors {
 			sel = k + "=" + v
@@ -682,8 +721,7 @@ func destroySidecars(deploymentsClient appsv1.DeploymentInterface, selectors map
 		return err
 	}
 	if dpl.Namespace != namespace {
-		// NOTE: this code path should never trigger, essentially a panic()
-		return ErrDeploymentOutsideNamespace
+		panic(ErrDeploymentOutsideNamespace)
 	}
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		deployment, getErr := deploymentsClient.Get(context.TODO(), dpl.Name, metav1.GetOptions{})
@@ -819,4 +857,21 @@ func untapSvc(svcClient corev1.ServiceInterface, svcName string) error {
 		return fmt.Errorf("failed to untap Service: %w", retryErr)
 	}
 	return nil
+}
+
+// hasNamespace checks if a given Namespace exists.
+func hasNamespace(client kubernetes.Interface, namespace string) (bool, error) {
+	if namespace == "" {
+		return false, os.ErrInvalid
+	}
+	ns, err := client.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return false, err
+	}
+	for _, n := range ns.Items {
+		if n.Name == namespace {
+			return true, nil
+		}
+	}
+	return false, nil
 }

@@ -50,13 +50,14 @@ func Test_NewTapCommand(t *testing.T) {
 		{"stray_configmap", fakeClientUntappedWithConfigMap, 80, "default", nil},
 		{"named_ports", fakeClientUntappedNamedPorts, 80, "default", nil},
 		{"no_port_name", fakeClientUntappedNoPortName, 80, "default", nil},
+		{"named_ports_no_match", fakeClientUntappedNamedPortsMissing, 80, "default", ErrDeploymentMissingPorts},
 		{"incorrect_namespace", fakeClientUntappedSimple, 80, "notexist", ErrNamespaceNotExist},
 		{"incorrect_port", fakeClientUntappedSimple, 9999, "default", ErrServiceMissingPort},
 		{"tapped_simple", fakeClientTappedSimple, 80, "default", ErrServiceTapped},
 		{"missing_deployment", fakeClientUntappedWithoutDeployment, 80, "default", ErrServiceSelectorNoMatch},
 		{"no_namespace_in_cluster", fakeClientUntappedWithoutNamespace, 80, "default", ErrNamespaceNotExist},
 		{"deployment_without_labels", fakeClientUntappedNoLabels, 80, "default", ErrServiceSelectorNoMatch},
-		{"service_without_selectors", fakeClientUntappedNoSelectors, 80, "default", ErrNoSelectors},
+		{"service_without_selectors", fakeClientUntappedNoSelectors, 80, "default", ErrSelectorsMissing},
 		{"multi_deployment_match", fakeClientUntappedMultiDeploymentMatch, 80, "default", ErrServiceSelectorMultiMatch},
 		{"deployment_match_outside_namespace", fakeClientUntappedMatchOutsideNamespace, 80, "default", ErrServiceSelectorNoMatch},
 	}
@@ -116,7 +117,7 @@ func Test_NewUntapCommand(t *testing.T) {
 		{"no_namespace_in_cluster", fakeClientUntappedWithoutNamespace, "none", ErrNamespaceNotExist},
 		{"missing_deployment", fakeClientUntappedWithoutDeployment, "default", ErrServiceSelectorNoMatch},
 		{"deployment_without_labels", fakeClientUntappedNoLabels, "default", ErrServiceSelectorNoMatch},
-		{"service_without_selectors", fakeClientUntappedNoSelectors, "default", ErrNoSelectors},
+		{"service_without_selectors", fakeClientUntappedNoSelectors, "default", ErrSelectorsMissing},
 		{"multi_deployment_match", fakeClientUntappedMultiDeploymentMatch, "default", ErrServiceSelectorMultiMatch},
 		{"deployment_match_outside_namespace", fakeClientUntappedMatchOutsideNamespace, "default", ErrServiceSelectorNoMatch},
 	}
@@ -452,6 +453,31 @@ func fakeClientTappedWithoutAnnotations() *fake.Clientset {
 }
 
 func fakeClientUntappedNamedPorts() *fake.Clientset {
+	namespace := simpleNamespace
+	deployment := simpleDeployment
+	service := simpleService
+	var ports []v1.ServicePort
+	for _, p := range service.Spec.Ports {
+		p.TargetPort = intstr.FromString("myport")
+		ports = append(ports, p)
+	}
+	service.Spec.Ports = ports
+	for i, c := range deployment.Spec.Template.Spec.Containers {
+		deployment.Spec.Template.Spec.Containers[i].Ports = append(c.Ports, v1.ContainerPort{
+			Name:          "myport",
+			ContainerPort: 8080,
+			Protocol:      v1.ProtocolTCP,
+		})
+	}
+	return fake.NewSimpleClientset(
+		&namespace,
+		&deployment,
+		&service,
+	)
+}
+
+// fakeClientUntappedNamedPortsMissing is missing the port name match within the deployment
+func fakeClientUntappedNamedPortsMissing() *fake.Clientset {
 	namespace := simpleNamespace
 	deployment := simpleDeployment
 	service := simpleService

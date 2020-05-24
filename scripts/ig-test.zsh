@@ -54,92 +54,62 @@ trap '{ e=${?}; sleep 1; kind delete cluster --name kubetap ; exit ${e} }' SIGIN
 kind create cluster --name kubetap
 
 #
-# Test kubetap using helm stable/grafana
+# Test kubetap using helm ${chart}
 #
+_kubetap_helm_charts=('stable/grafana' 'stable/dokuwiki')
+_kubetap_helm_services=('grafana' 'dokuwiki')
+_kubetap_helm_svc_port=('80' '80')
 
-# TODO: install helm
-helm install --kube-context kind-kubetap grafana stable/grafana
+typeset -i _kubetap_iter
+for chart in ${_kubetap_helm_charts[@]}; do
+  ((_kubetap_iter+=1))
+  _kubetap_helm=${chart:t}
+  _kubetap_port=${_kubetap_helm_svc_port[${_kubetap_iter}]}
+  _kubetap_service=${_kubetap_helm_services[${_kubetap_iter}]}
 
-kubectl tap on grafana -p80 --context kind-kubetap
+  helm install --kube-context kind-kubetap ${_kubetap_helm} ${chart}
+  kubectl tap on ${_kubetap_service} -p${_kubetap_port} --context kind-kubetap
+  sleep 20
 
-typeset -i readyCt
-for ((i=0; i <= 20; i++)); do
-  readyCt=$(kubectl --context kind-kubetap get deployments.apps grafana -ojsonpath='{.status.readyReplicas}')
-  if (( readyCt == 1)); then
-    break
+  _kubetap_ready_state=""
+  for i in {0..20}; do
+    sleep 6
+    _kubetap_pod=($(kubectl --context kind-kubetap get pods -ojsonpath='{.items[*].metadata.name}'))
+    if (( ${#_kubetap_pod} != 1 )); then
+      continue
+    fi
+    _kubetap_ready_state=$(kubectl --context kind-kubetap get pod ${_kubetap_pod} -ojsonpath='{.status.containerStatuses[*].ready}')
+    if [[ ${_kubetap_ready_state} == 'true true' ]]; then
+      break
+    fi
+  done
+  if [[ ${_kubetap_ready_state} != 'true true' ]]; then
+    echo "container did not come up within 90 seconds"
+    return 1
   fi
-  sleep 6
+  unset _kubetap_pod _kubetap_ready_state i
+
+  sleep 1
+  kubectl port-forward svc/${_kubetap_service} -n default 2244:2244 &
+  _kubetap_pf_one_pid=${!}
+  kubectl port-forward svc/${_kubetap_service} -n default 4000:${_kubetap_port} &
+  _kubetap_pf_two_pid=${!}
+  sleep 5
+
+  # check that we can reach both services
+  curl -v http://127.0.0.1:2244 || return 1
+  curl -v http://127.0.0.1:4000 || return 1
+  # TODO: should also check the mitmproxy JSON resp body to check that it's connected
+  kill ${_kubetap_pf_one_pid}
+  kill ${_kubetap_pf_two_pid}
+  unset _kubetap_pf_one_pid _kubetap_pf_two_pid
+
+  # cleanup test
+  kubectl tap off ${_kubetap_service} --context kind-kubetap
+  helm delete --kube-context kind-kubetap ${_kubetap_helm}
+
+  unset _kubetap_helm _kubetap_port _kubetap_service
 done
-if (( readyCt != 1 )); then
-  echo "container did not come up within 90 seconds"
-  return 1
-fi
-unset readyCt
-
-# without a delay here, port forwards occasionally fail. Need
-# to implement kubectl ready check like in kubetap.
-sleep 15
-kubectl port-forward svc/grafana -n default 2244:2244 &
-_kubetap_pf_one_pid=${!}
-kubectl port-forward svc/grafana -n default 4000:80 &
-_kubetap_pf_two_pid=${!}
-sleep 5
-
-# check that we can reach both services
-curl -v http://127.0.0.1:2244 || return 1
-curl -v http://127.0.0.1:4000 || return 1
-# TODO: should also check the mitmproxy JSON resp body to check that it's connected
-kill ${_kubetap_pf_one_pid}
-kill ${_kubetap_pf_two_pid}
-unset _kubetap_pf_one_pid _kubetap_pf_two_pid
-
-kubectl tap off grafana --context kind-kubetap
-
-helm delete --kube-context kind-kubetap grafana
-
-#
-# Test kubetap using helm stable/dokuwiki
-#
-
-helm install --kube-context kind-kubetap dw stable/dokuwiki
-
-kubectl tap on dw-dokuwiki -p80
-
-typeset -i readyCt
-for ((i=0; i <= 20; i++)); do
-  readyCt=$(kubectl --context kind-kubetap get deployments.apps dw-dokuwiki -ojsonpath='{.status.readyReplicas}')
-  if (( readyCt == 1)); then
-    break
-  fi
-  sleep 6
-done
-if (( readyCt != 1 )); then
-  echo "container did not come up within 90 seconds"
-  return 1
-fi
-unset readyCt
-
-# without a delay here, port forwards occasionally fail. Need
-# to implement kubectl ready check like in kubetap.
-sleep 15
-kubectl port-forward svc/dw-dokuwiki -n default 2244:2244 &
-_kubetap_pf_one_pid=${!}
-kubectl port-forward svc/dw-dokuwiki -n default 4000:80 &
-_kubetap_pf_two_pid=${!}
-sleep 5
-
-# check that we can reach both services
-curl -v http://127.0.0.1:2244 || return 1
-curl -v http://127.0.0.1:4000 || return 1
-# TODO: should also check the mitmproxy JSON resp body to check that it's connected
-kill ${_kubetap_pf_one_pid}
-kill ${_kubetap_pf_two_pid}
-unset _kubetap_pf_one_pid _kubetap_pf_two_pid
-
-sleep 3
-kubectl tap off dw-dokuwiki --context kind-kubetap
-
-sleep 1
-helm delete --kube-context kind-kubetap dw
+unset _kubetap_helm_charts _kubetap_helm_services _kubetap_helm_svc_port _kubetap_iter
 
 source ${script_dir}/_post.zsh
