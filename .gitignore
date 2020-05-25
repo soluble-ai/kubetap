@@ -21,3 +21,4 @@ site/
 .vim/
 venv/
 coverage.*
+krew/
