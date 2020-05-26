@@ -56,15 +56,6 @@ const (
 	kubetapProxyWebInterfacePort = 2244
 	kubetapConfigMapPrefix       = "kubetap-target-"
 
-	mitmproxyDataVolName = "mitmproxy-data"
-	mitmproxyConfigFile  = "config.yaml"
-	mitmproxyBaseConfig  = `listen_port: 7777
-ssl_insecure: true
-web_port: 2244
-web_host: 0.0.0.0
-web_open_browser: false
-`
-
 	interactiveTimeoutSeconds = 90
 	configMapAnnotationPrefix = "target-"
 
@@ -92,18 +83,35 @@ var (
 // is injected as a sidecar.
 type Protocol string
 
-// ProxyOptions are options used to configure the mitmproxy configmap
-// We will eventually provide explicit support for modes, and methods
-// which validate the configuration for a given mode will likely exist
-// in the future.
+// Tap is a method of implementing a "Tap" for a Kubernetes cluster.
+type Tap interface {
+	// Sidecar produces a sidecar container to be added to a
+	// Deployment.
+	Sidecar(string) v1.Container
+
+	// PatchDeployment tweaks a Deployment after a Sidecar is added
+	// during the tap process.
+	PatchDeployment(*k8sappsv1.Deployment)
+
+	ReadyEnv() error
+	UnreadyEnv() error
+
+	// String prints the tap method, be it mitmproxy, tcpdump, etc.
+	String() string
+
+	// Protocols returns a slice of protocols supported by the tap.
+	Protocols() []Protocol
+}
+
+// ProxyOptions are options used to configure the Tap implementation.
 type ProxyOptions struct {
-	Target        string
-	Protocol      Protocol
-	UpstreamHTTPS bool
-	UpstreamPort  string
-	Mode          string
-	Namespace     string
-	Image         string
+	Target        string   `json:"target"`
+	Protocol      Protocol `json:"protocol"`
+	UpstreamHTTPS bool     `json:"upstream_https"`
+	UpstreamPort  string   `json:"upstream_port"`
+	Mode          string   `json:"mode"`
+	Namespace     string   `json:"namespace"`
+	Image         string   `json:"image"`
 }
 
 // NewListCommand lists Services that are already tapped.
@@ -156,9 +164,7 @@ func NewListCommand(client kubernetes.Interface, viper *viper.Viper) func(*cobra
 }
 
 // NewTapCommand identifies a target employment through service selectors and modifies that
-// deployment to add a mitmproxy sidecar and configmap, then adjusts the service targetPort
-// to point to the mitmproxy sidecar. Mitmproxy's ConfigMap sets the upstream to the original
-// service destination.
+// deployment to add a proxy sidecar.
 func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *viper.Viper) func(*cobra.Command, []string) error { //nolint: gocyclo
 	return func(cmd *cobra.Command, args []string) error {
 		targetSvcName := args[0]
@@ -170,22 +176,7 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 		https := viper.GetBool("https")
 		portForward := viper.GetBool("portForward")
 		openBrowser := viper.GetBool("browser")
-		if Protocol(protocol) != protocolHTTP {
-			// only automatically adjust the image if it hasn't been overridden
-			if image == defaultImageHTTP {
-				switch Protocol(protocol) {
-				case protocolTCP, protocolUDP:
-					//TODO: make this container and remove error
-					image = defaultImageRaw
-					return fmt.Errorf("mode %q is currently not supported", image)
-				case protocolGRPC:
-					//TODO: make this container and remove error
-					image = defaultImageGRPC
-					return fmt.Errorf("mode %q is currently not supported", image)
-				}
-				viper.Set("proxyImage", image)
-			}
-		}
+
 		if openBrowser {
 			portForward = true
 		}
@@ -194,6 +185,10 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 			return fmt.Errorf("--port flag not provided")
 		}
 		if namespace == "" {
+			// TODO: There is probably a way to get the default namespace from the
+			// client context, but I'm not sure what that API is. Will dig
+			// for that at some point.
+			// BUG: "default" is not always the "correct default".
 			viper.Set("namespace", "default")
 			namespace = "default"
 		}
@@ -211,10 +206,23 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 			Mode:          "reverse", // eventually this may be configurable
 			Namespace:     namespace,
 		}
+		// Adjust default image by protocol if not manually set
+		if image == defaultImageHTTP {
+			switch Protocol(protocol) {
+			case protocolTCP, protocolUDP:
+				//TODO: make this container and remove error
+				image = defaultImageRaw
+				return fmt.Errorf("mode %q is currently not supported", image)
+			case protocolGRPC:
+				//TODO: make this container and remove error
+				image = defaultImageGRPC
+				return fmt.Errorf("mode %q is currently not supported", image)
+			}
+			viper.Set("proxyImage", image)
+		}
 
 		deploymentsClient := client.AppsV1().Deployments(namespace)
 		servicesClient := client.CoreV1().Services(namespace)
-		configmapsClient := client.CoreV1().ConfigMaps(namespace)
 
 		// get the service to ensure it exists before we go around monkeying with deployments
 		targetService, err := client.CoreV1().Services(namespace).Get(context.TODO(), targetSvcName, metav1.GetOptions{})
@@ -255,30 +263,56 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 			}
 		}
 
-		// Create the ConfigMap based the options we're configuring mitmproxy with
-		if err := createConfigMap(configmapsClient, proxyOpts); err != nil {
-			// If the service hasn't been tapped but still has a configmap from a previous
-			// run (which can happen if the deployment borks and "tap off" isn't explicitly run,
-			// delete the configmap and try again.
-			// This is mostly here to fix development environments that become broken during
-			// code testing.
-			_ = destroyConfigMap(configmapsClient, proxyOpts.Target)
-			rErr := createConfigMap(configmapsClient, proxyOpts)
-			if rErr != nil {
-				if errors.Is(os.ErrInvalid, rErr) {
-					return fmt.Errorf("there was an unexpected problem creating the ConfigMap")
-				}
-				return rErr
-			}
+		// Get a proxy based on the protocol type
+		var proxy Tap
+		switch Protocol(protocol) {
+		case protocolTCP, protocolUDP:
+			//proxy =
+		case protocolGRPC:
+			//proxy = abhhhhh
+		default:
+			// AKA, case protocolHTTP:
+			proxy = NewMitmproxy(client, proxyOpts)
 		}
 
-		// Modify the Deployment to inject mitmproxy sidecar
-		if err := createSidecars(deploymentsClient, targetService.Spec.Selector, image, commandArgs); err != nil {
-			fmt.Fprintln(cmd.OutOrStdout(), "Error modifying Deployment, reverting tap...")
-			_ = NewUntapCommand(client, viper)(cmd, args)
+		// Prepare the environment (configmaps, secrets, volumes, etc).
+		// Nothing in ReadyEnv should modify manifests that result in
+		// code running in the cluster. No Pods, no Contaniers, no ReplicaSets,
+		// etc.
+		if err := proxy.ReadyEnv(); err != nil {
 			return err
 		}
-		// Tap the service to redirect the incoming traffic to our proxy, which is configured to redirect
+
+		// Setup the sidcar
+		dpl, err := deploymentFromSelectors(deploymentsClient, targetService.Spec.Selector)
+		if err != nil {
+			return err
+		}
+		sidecar := proxy.Sidecar(dpl.Name)
+		sidecar.Image = image
+		sidecar.Args = commandArgs
+
+		// Apply the Deployment configuration
+		retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			dpl.Spec.Template.Spec.Containers = append(dpl.Spec.Template.Spec.Containers, sidecar)
+			proxy.PatchDeployment(&dpl)
+			// set annotation on pod to know what pods are tapped
+			anns := dpl.Spec.Template.GetAnnotations()
+			if anns == nil {
+				anns = map[string]string{}
+			}
+			anns[annotationIsTapped] = dpl.Name
+			dpl.Spec.Template.SetAnnotations(anns)
+			_, updateErr := deploymentsClient.Update(context.TODO(), &dpl, metav1.UpdateOptions{})
+			return updateErr
+		})
+		if retryErr != nil {
+			fmt.Fprintln(cmd.OutOrStdout(), "Error modifying Deployment, reverting tap...")
+			_ = NewUntapCommand(client, viper)(cmd, args)
+			return fmt.Errorf("failed to add sidecars to Deployment: %w", retryErr)
+		}
+
+		// Tap the Service to redirect the incoming traffic to our proxy, which is configured to redirect
 		// to the original port.
 		if err := tapSvc(servicesClient, targetSvcName, targetSvcPort); err != nil {
 			fmt.Fprintln(cmd.OutOrStdout(), "Error modifying Service, reverting tap...")
@@ -289,7 +323,7 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 		if !portForward {
 			fmt.Fprintln(cmd.OutOrStdout())
 			fmt.Fprintf(cmd.OutOrStdout(), "Port %d of Service %q has been tapped!\n\n", targetSvcPort, targetSvcName)
-			fmt.Fprintf(cmd.OutOrStdout(), "You can access the MITMproxy web interface at http://127.0.0.1:2244\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "You can access the proxy web interface at http://127.0.0.1:2244\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "after running the following command:\n\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "  kubectl port-forward svc/%s -n %s 2244:2244\n\n", targetSvcName, namespace)
 			fmt.Fprintf(cmd.OutOrStdout(), "If the Service is not publicly exposed through an Ingress,\n")
@@ -331,7 +365,7 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 			progressbar.OptionSetPredictTime(false),
 			progressbar.OptionSetWriter(cmd.OutOrStderr()),
 			progressbar.OptionSetWidth(30),
-			progressbar.OptionSetDescription("[reset] Waiting for Pod containers to become ready..."),
+			progressbar.OptionSetDescription("Waiting for Pod containers to become ready..."),
 			progressbar.OptionOnCompletion(func() {
 				fmt.Fprintf(cmd.OutOrStderr(), "\n")
 			}),
@@ -404,7 +438,7 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 			return err
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "\nPort-Forwards:\n\n")
-		fmt.Fprintf(cmd.OutOrStdout(), "  %s - http://127.0.0.1:%s\n", "mitmproxy", strconv.Itoa(int(kubetapProxyWebInterfacePort)))
+		fmt.Fprintf(cmd.OutOrStdout(), "  %s - http://127.0.0.1:%s\n", proxy.String(), strconv.Itoa(int(kubetapProxyWebInterfacePort)))
 		if https {
 			fmt.Fprintf(cmd.OutOrStdout(), "  %s - https://127.0.0.1:%s\n\n", targetSvcName, "4000")
 		} else {
@@ -451,109 +485,68 @@ func NewUntapCommand(client kubernetes.Interface, viper *viper.Viper) func(*cobr
 
 		deploymentsClient := client.AppsV1().Deployments(namespace)
 		servicesClient := client.CoreV1().Services(namespace)
-		configmapsClient := client.CoreV1().ConfigMaps(namespace)
 
-		targetService, err := client.CoreV1().Services(namespace).Get(context.TODO(), targetSvcName, metav1.GetOptions{})
-		if err != nil {
-			return err
-		}
-		if err := destroySidecars(deploymentsClient, targetService.Spec.Selector, namespace); err != nil {
-			return err
-		}
-		if err := untapSvc(servicesClient, targetSvcName); err != nil {
-			return err
-		}
-		if err := destroyConfigMap(configmapsClient, targetSvcName); err != nil {
+		//TODO cleanup
+		// for the cleanup, we only need to provide the namespace. The fact that I have to write
+		// this probably means it needs to be refactored again later.
+		proxy := NewMitmproxy(client, ProxyOptions{
+			Namespace: namespace,
+			Target:    targetSvcName,
+		})
+		if err := proxy.UnreadyEnv(); err != nil {
 			if !errors.Is(ErrConfigMapNoMatch, err) {
 				return err
 			}
 		}
 
+		targetService, err := client.CoreV1().Services(namespace).Get(context.TODO(), targetSvcName, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		dpl, err := deploymentFromSelectors(deploymentsClient, targetService.Spec.Selector)
+		if err != nil {
+			return err
+		}
+		if dpl.Namespace != namespace {
+			panic(ErrDeploymentOutsideNamespace)
+		}
+		retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			// Explicitly re-fetch the deployment to reduce the chance of having a race
+			deployment, getErr := deploymentsClient.Get(context.TODO(), dpl.Name, metav1.GetOptions{})
+			if getErr != nil {
+				return getErr
+			}
+			var containersNoProxy []v1.Container
+			for _, c := range deployment.Spec.Template.Spec.Containers {
+				if c.Name != kubetapContainerName {
+					containersNoProxy = append(containersNoProxy, c)
+				}
+			}
+			deployment.Spec.Template.Spec.Containers = containersNoProxy
+			var volumes []v1.Volume
+			for _, v := range deployment.Spec.Template.Spec.Volumes {
+				if !strings.HasPrefix(v.Name, "kubetap") {
+					volumes = append(volumes, v)
+				}
+			}
+			deployment.Spec.Template.Spec.Volumes = volumes
+			anns := deployment.Spec.Template.GetAnnotations()
+			if anns != nil {
+				delete(anns, annotationIsTapped)
+				deployment.Spec.Template.SetAnnotations(anns)
+			}
+			_, updateErr := deploymentsClient.Update(context.TODO(), deployment, metav1.UpdateOptions{})
+			return updateErr
+		})
+		if retryErr != nil {
+			return fmt.Errorf("failed to remove sidecars from Deployment: %w", retryErr)
+		}
+		if err := untapSvc(servicesClient, targetSvcName); err != nil {
+			return err
+		}
 		fmt.Fprintf(cmd.OutOrStdout(), "Untapped Service %q\n", targetSvcName)
 		return nil
 	}
-}
-
-func createConfigMap(configmapClient corev1.ConfigMapInterface, proxyOpts ProxyOptions) error {
-	// TODO: eventually, we should build a struct and use yaml to marshal this,
-	// but for now we're just doing string concatenation.
-	var mitmproxyConfig []byte
-	switch proxyOpts.Mode {
-	case "reverse":
-		if proxyOpts.UpstreamHTTPS {
-			mitmproxyConfig = append([]byte(mitmproxyBaseConfig), []byte("mode: reverse:https://127.0.0.1:"+proxyOpts.UpstreamPort)...)
-		} else {
-			mitmproxyConfig = append([]byte(mitmproxyBaseConfig), []byte("mode: reverse:http://127.0.0.1:"+proxyOpts.UpstreamPort)...)
-		}
-	case "regular":
-		// non-applicable
-		return errors.New("mitmproxy container only supports \"reverse\" mode")
-	case "socks5":
-		// non-applicable
-		return errors.New("mitmproxy container only supports \"reverse\" mode")
-	case "upstream":
-		// non-applicable, unless you really know what you're doing, in which case fork this and connect it to your existing proxy
-		return errors.New("mitmproxy container only supports \"reverse\" mode")
-	case "transparent":
-		// Because transparent mode uses iptables, it's not supported as we cannot guarantee that iptables is available and functioning
-		return errors.New("mitmproxy container only supports \"reverse\" mode")
-	default:
-		return errors.New("invalid proxy mode: \"" + proxyOpts.Mode + "\"")
-	}
-	cmData := make(map[string][]byte)
-	cmData[mitmproxyConfigFile] = mitmproxyConfig
-	cm := v1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      kubetapConfigMapPrefix + proxyOpts.Target,
-			Namespace: proxyOpts.Namespace,
-			Annotations: map[string]string{
-				annotationConfigMap: configMapAnnotationPrefix + proxyOpts.Target,
-			},
-		},
-		BinaryData: cmData,
-	}
-	slen := len(cm.BinaryData[mitmproxyConfigFile])
-	if slen == 0 {
-		return os.ErrInvalid
-	}
-	ccm, err := configmapClient.Create(context.TODO(), &cm, metav1.CreateOptions{})
-	if err != nil {
-		return err
-	}
-	if ccm.BinaryData == nil {
-		return os.ErrInvalid
-	}
-	cdata := ccm.BinaryData[mitmproxyConfigFile]
-	if len(cdata) != slen {
-		return ErrCreateResourceMismatch
-	}
-	return nil
-}
-
-func destroyConfigMap(configmapClient corev1.ConfigMapInterface, serviceName string) error {
-	if serviceName == "" {
-		return os.ErrInvalid
-	}
-	cms, err := configmapClient.List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		return fmt.Errorf("error getting ConfigMaps: %w", err)
-	}
-	var targetConfigMapNames []string
-	for _, cm := range cms.Items {
-		anns := cm.GetAnnotations()
-		if anns == nil {
-			continue
-		}
-		for k, v := range anns {
-			if k == annotationConfigMap && v == configMapAnnotationPrefix+serviceName {
-				targetConfigMapNames = append(targetConfigMapNames, cm.Name)
-			}
-		}
-	}
-	if len(targetConfigMapNames) == 0 {
-		return ErrConfigMapNoMatch
-	}
-	return configmapClient.Delete(context.TODO(), targetConfigMapNames[0], metav1.DeleteOptions{})
 }
 
 // deploymentFromSelectors returns a deployment given selector labels.
@@ -607,153 +600,6 @@ func kubetapPod(podClient corev1.PodInterface, deploymentName string) (v1.Pod, e
 		}
 	}
 	return p, ErrKubetapPodNoMatch
-}
-
-// createSidecars edits Pod objects matching selectors to add a sidecar with the specificed image.
-func createSidecars(deploymentsClient appsv1.DeploymentInterface, selectors map[string]string, image string, commandArgs []string) error {
-	dpl, err := deploymentFromSelectors(deploymentsClient, selectors)
-	if err != nil {
-		return err
-	}
-	for _, c := range dpl.Spec.Template.Spec.Containers {
-		if c.Name == kubetapContainerName {
-			// NOTE: again, should be caught by caller...
-			return ErrServiceTapped
-		}
-	}
-	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		deployment, getErr := deploymentsClient.Get(context.TODO(), dpl.Name, metav1.GetOptions{})
-		if getErr != nil {
-			return getErr
-		}
-		proxySidecarContainer := v1.Container{
-			Name:            kubetapContainerName,
-			Image:           image,
-			Args:            commandArgs,
-			ImagePullPolicy: v1.PullAlways,
-			Ports: []v1.ContainerPort{
-				{
-					Name:          kubetapPortName,
-					ContainerPort: kubetapProxyListenPort,
-					Protocol:      v1.ProtocolTCP,
-				},
-				{
-					Name:          kubetapWebPortName,
-					ContainerPort: kubetapProxyWebInterfacePort,
-					Protocol:      v1.ProtocolTCP,
-				},
-			},
-			ReadinessProbe: &v1.Probe{
-				Handler: v1.Handler{
-					HTTPGet: &v1.HTTPGetAction{
-						Path:   "/",
-						Port:   intstr.FromInt(kubetapProxyWebInterfacePort),
-						Scheme: v1.URISchemeHTTP,
-					},
-				},
-				InitialDelaySeconds: 5,
-				PeriodSeconds:       5,
-				SuccessThreshold:    3,
-				TimeoutSeconds:      5,
-			},
-			VolumeMounts: []v1.VolumeMount{
-				{
-					Name:      kubetapConfigMapPrefix + dpl.Name,
-					MountPath: "/home/mitmproxy/config/", // we store outside main dir to prevent RO problems, see below.
-					// this also means that we need to wrap the official mitmproxy container.
-					/*
-						// *sigh* https://github.com/kubernetes/kubernetes/issues/64120
-						ReadOnly: false, // mitmproxy container does a chown
-						MountPath: "/home/mitmproxy/.mitmproxy/config.yaml",
-						SubPath:   "config.yaml", // we only mount the config file
-					*/
-				},
-				{
-					Name:      mitmproxyDataVolName,
-					MountPath: "/home/mitmproxy/.mitmproxy",
-					ReadOnly:  false,
-				},
-			},
-		}
-		deployment.Spec.Template.Spec.Containers = append(deployment.Spec.Template.Spec.Containers, proxySidecarContainer)
-		// HACK: we must set file mode to 777 to avoid pod security context problems.
-		mode := int32(os.FileMode(0o777))
-		deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, v1.Volume{
-			Name: kubetapConfigMapPrefix + dpl.Name,
-			VolumeSource: v1.VolumeSource{
-				ConfigMap: &v1.ConfigMapVolumeSource{
-					// this doesn't work because kube has RW issues withconfigmaps that use subpaths
-					// ref: https://github.com/kubernetes/kubernetes/issues/64120
-					DefaultMode: &mode,
-					LocalObjectReference: v1.LocalObjectReference{
-						Name: kubetapConfigMapPrefix + dpl.Name,
-					},
-				},
-			},
-		})
-		// add emptydir to resolve permission problems, and to down the road export dumps
-		deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, v1.Volume{
-			Name: mitmproxyDataVolName,
-			VolumeSource: v1.VolumeSource{
-				EmptyDir: &v1.EmptyDirVolumeSource{},
-			},
-		})
-		// set annotation on pod to know what pods are tapped
-		anns := deployment.Spec.Template.GetAnnotations()
-		if anns == nil {
-			anns = map[string]string{}
-		}
-		anns[annotationIsTapped] = dpl.Name
-		deployment.Spec.Template.SetAnnotations(anns)
-		_, updateErr := deploymentsClient.Update(context.TODO(), deployment, metav1.UpdateOptions{})
-		return updateErr
-	})
-	if retryErr != nil {
-		return fmt.Errorf("failed to add sidecars to Deployment: %w", retryErr)
-	}
-	return nil
-}
-
-// destroySidecars kills the pods and allows recreation from deployment spec, but may eventually handle "untapping" more gracefully.
-func destroySidecars(deploymentsClient appsv1.DeploymentInterface, selectors map[string]string, namespace string) error {
-	dpl, err := deploymentFromSelectors(deploymentsClient, selectors)
-	if err != nil {
-		return err
-	}
-	if dpl.Namespace != namespace {
-		panic(ErrDeploymentOutsideNamespace)
-	}
-	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		deployment, getErr := deploymentsClient.Get(context.TODO(), dpl.Name, metav1.GetOptions{})
-		if getErr != nil {
-			return getErr
-		}
-		var containersNoProxy []v1.Container
-		for _, c := range deployment.Spec.Template.Spec.Containers {
-			if c.Name != kubetapContainerName {
-				containersNoProxy = append(containersNoProxy, c)
-			}
-		}
-		deployment.Spec.Template.Spec.Containers = containersNoProxy
-		var volumes []v1.Volume
-		for _, v := range deployment.Spec.Template.Spec.Volumes {
-			if !strings.Contains(v.Name, kubetapConfigMapPrefix) && v.Name != mitmproxyDataVolName {
-				volumes = append(volumes, v)
-			}
-		}
-		deployment.Spec.Template.Spec.Volumes = volumes
-		anns := deployment.Spec.Template.GetAnnotations()
-		if anns != nil {
-			delete(anns, annotationIsTapped)
-			deployment.Spec.Template.SetAnnotations(anns)
-		}
-		_, updateErr := deploymentsClient.Update(context.TODO(), deployment, metav1.UpdateOptions{})
-		return updateErr
-	})
-	if retryErr != nil {
-		return fmt.Errorf("failed to remove sidecars from Deployment: %w", retryErr)
-	}
-	return nil
 }
 
 // tapSvc modifies a target port to point to a new proxy service.
