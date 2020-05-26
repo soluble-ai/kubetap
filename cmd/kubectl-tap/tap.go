@@ -105,13 +105,13 @@ type Tap interface {
 
 // ProxyOptions are options used to configure the Tap implementation.
 type ProxyOptions struct {
-	Target        string
-	Protocol      Protocol
-	UpstreamHTTPS bool
-	UpstreamPort  string
-	Mode          string
-	Namespace     string
-	Image         string
+	Target        string   `json:"target"`
+	Protocol      Protocol `json:"protocol"`
+	UpstreamHTTPS bool     `json:"upstream_https"`
+	UpstreamPort  string   `json:"upstream_port"`
+	Mode          string   `json:"mode"`
+	Namespace     string   `json:"namespace"`
+	Image         string   `json:"image"`
 }
 
 // NewListCommand lists Services that are already tapped.
@@ -185,6 +185,10 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 			return fmt.Errorf("--port flag not provided")
 		}
 		if namespace == "" {
+			// TODO: There is probably a way to get the default namespace from the
+			// client context, but I'm not sure what that API is. Will dig
+			// for that at some point.
+			// BUG: "default" is not always the "correct default".
 			viper.Set("namespace", "default")
 			namespace = "default"
 		}
@@ -507,6 +511,7 @@ func NewUntapCommand(client kubernetes.Interface, viper *viper.Viper) func(*cobr
 			panic(ErrDeploymentOutsideNamespace)
 		}
 		retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			// Explicitly re-fetch the deployment to reduce the chance of having a race
 			deployment, getErr := deploymentsClient.Get(context.TODO(), dpl.Name, metav1.GetOptions{})
 			if getErr != nil {
 				return getErr
@@ -520,7 +525,7 @@ func NewUntapCommand(client kubernetes.Interface, viper *viper.Viper) func(*cobr
 			deployment.Spec.Template.Spec.Containers = containersNoProxy
 			var volumes []v1.Volume
 			for _, v := range deployment.Spec.Template.Spec.Volumes {
-				if !strings.Contains(v.Name, "kubetap") {
+				if !strings.HasPrefix(v.Name, "kubetap") {
 					volumes = append(volumes, v)
 				}
 			}

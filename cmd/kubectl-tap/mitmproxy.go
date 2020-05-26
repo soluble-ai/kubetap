@@ -27,12 +27,11 @@ web_open_browser: false
 `
 )
 
+// MitmproxySidecarContainer is the default proxy sidecar for HTTP Taps.
 var MitmproxySidecarContainer = v1.Container{
 	Name: kubetapContainerName,
-	//NOTE: Image must be set
-	//Image:           image,
-	//NOTE Args must be set
-	//Args:            commandArgs,
+	//Image:           image,       // Image is controlled by main
+	//Args:            commandArgs, // Args is controlled by main
 	ImagePullPolicy: v1.PullAlways,
 	Ports: []v1.ContainerPort{
 		{
@@ -61,9 +60,9 @@ var MitmproxySidecarContainer = v1.Container{
 	},
 	VolumeMounts: []v1.VolumeMount{
 		{
-			//NOTE: Name must be set
-			//Name:      kubetapConfigMapPrefix + dpl.Name,
-			MountPath: "/home/mitmproxy/config/", // we store outside main dir to prevent RO problems, see below.
+			//Name:      kubetapConfigMapPrefix + dpl.Name, // Name is controlled by main
+			MountPath: "/home/mitmproxy/config/",
+			// we store outside main dir to prevent RO problems, see below.
 			// this also means that we need to wrap the official mitmproxy container.
 			/*
 				// *sigh* https://github.com/kubernetes/kubernetes/issues/64120
@@ -78,6 +77,26 @@ var MitmproxySidecarContainer = v1.Container{
 			ReadOnly:  false,
 		},
 	},
+}
+
+// NewMitmproxy initializes a new mitmproxy Tap.
+func NewMitmproxy(c kubernetes.Interface, p ProxyOptions) Tap {
+	// mitmproxy only supports one mode right now.
+	// How we expose options for other modes may
+	// be explored in the future.
+	p.Mode = "reverse"
+	return &Mitmproxy{
+		Protos:    []Protocol{protocolHTTP},
+		Client:    c,
+		ProxyOpts: p,
+	}
+}
+
+// Mitmproxy is a interactive web proxy for intercepting and modifying HTTP requests.
+type Mitmproxy struct {
+	Protos    []Protocol
+	Client    kubernetes.Interface
+	ProxyOpts ProxyOptions
 }
 
 // Sidecar provides a proxy sidecar container.
@@ -108,35 +127,17 @@ func (m *Mitmproxy) PatchDeployment(deployment *k8sappsv1.Deployment) {
 	})
 }
 
-// Mitmproxy is a interactive web proxy for intercepting and modifying HTTP requests.
-type Mitmproxy struct {
-	Protos    []Protocol
-	Client    kubernetes.Interface
-	ProxyOpts ProxyOptions
-}
-
-// NewMitmproxy initializes a new mitmproxy tap.
-func NewMitmproxy(c kubernetes.Interface, p ProxyOptions) Tap {
-	// mitmproxy only supports one mode right now.
-	// How we expose options for other modes may
-	// be explored in the future.
-	p.Mode = "reverse"
-	return &Mitmproxy{
-		Protos:    []Protocol{protocolHTTP},
-		Client:    c,
-		ProxyOpts: p,
-	}
-}
-
+// Protocols returns a slice of protocols supported by Mitmproxy, currently only HTTP.
 func (m *Mitmproxy) Protocols() []Protocol {
 	return m.Protos
 }
 
+// String is called to conveniently print the type of Tap to stdout.
 func (m *Mitmproxy) String() string {
 	return "mitmproxy"
 }
 
-// ReadyEnv readies the environment by providing a configmap for the mitmproxy container.
+// ReadyEnv readies the environment by providing a ConfigMap for the mitmproxy container.
 func (m *Mitmproxy) ReadyEnv() error {
 	configmapsClient := m.Client.CoreV1().ConfigMaps(m.ProxyOpts.Namespace)
 	// Create the ConfigMap based the options we're configuring mitmproxy with
@@ -164,6 +165,8 @@ func (m *Mitmproxy) UnreadyEnv() error {
 	return destroyConfigMap(configmapsClient, m.ProxyOpts.Target)
 }
 
+// createConfigMap creates a mitmproxy configmap based on the proxy mode, however currently
+// only "reverse" mode is supported.
 func createConfigMap(configmapClient corev1.ConfigMapInterface, proxyOpts ProxyOptions) error {
 	// TODO: eventually, we should build a struct and use yaml to marshal this,
 	// but for now we're just doing string concatenation.
@@ -220,6 +223,7 @@ func createConfigMap(configmapClient corev1.ConfigMapInterface, proxyOpts ProxyO
 	return nil
 }
 
+// destroyConfigMap removes a mitmproxy ConfigMap from the environment.
 func destroyConfigMap(configmapClient corev1.ConfigMapInterface, serviceName string) error {
 	if serviceName == "" {
 		return os.ErrInvalid
