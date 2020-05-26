@@ -137,6 +137,8 @@ docker run -v "${HOME}/.kube/:.kube/:ro" 'gcr.io/soluble-oss/kubectl-tap:latest'
 
 This project was created to compliment the [Soluble platform][soluble].
 
+[Building Kubetap][building-kubetap] is a blog post detailing the creation and implementation of kubetap.
+
 [soluble]: https://www.soluble.ai/
 [kubetap-docs]: https://soluble-ai.github.io/kubetap/
 [shield-go-version]: https://img.shields.io/github/go-mod/go-version/soluble-ai/kubetap
@@ -148,3 +150,4 @@ This project was created to compliment the [Soluble platform][soluble].
 [latest-release]: https://github.com/soluble-ai/kubetap/releases
 [build-status]: https://github.com/soluble-ai/kubetap/actions
 [video]: https://www.youtube.com/watch?v=hBroFtlxvkM
+[building-kubetap]: https://www.soluble.ai/blog/building-kubetap
