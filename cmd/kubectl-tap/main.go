@@ -79,10 +79,7 @@ func main() {
 	onCmd.Flags().Bool("browser", false, "enable to open browser windows to service and proxy. Also enables --port-forward")
 	onCmd.Flags().String("protocol", "http", "specify a protocol. Supported protocols: [ http ]")
 
-	rootCmd.AddCommand(versionCmd)
-	rootCmd.AddCommand(onCmd)
-	rootCmd.AddCommand(offCmd)
-	rootCmd.AddCommand(listCmd)
+	rootCmd.AddCommand(versionCmd, onCmd, offCmd, listCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		exiter.Exit(1)
@@ -119,6 +116,9 @@ func NewRootCmd(e Exiter) *cobra.Command {
 	return &cobra.Command{
 		// HACK: there is a "bug" in cobra's handling of Use strings with spaces, so the space
 		// below in the Use field isn't a true space -- it's a unicode Em space.
+		// Also, if you can't see the space below prominently, you need to change your editor settings
+		// to reveal Unicode characters. Otherwise, you're likely to PR some malicious code with a unicode
+		// domain at some point.
 		Use:   "kubectl tap",
 		Short: "kubetap",
 		Example: ` Create a tap for a new Service:
