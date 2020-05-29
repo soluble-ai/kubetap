@@ -64,7 +64,7 @@ brew install kubetap
 Binary releases for Mac (non-notarized), Windows, and Linux of varying
 architectures are available from the [Releases page](https://github.com/soluble-ai/kubetap/releases).
 
-## With Krew
+### With Krew
 
 Kubetap can be installed with krew:
 
@@ -74,7 +74,8 @@ kubectl krew install tap
 
 ## Usage
 
-Kubetap's binary is `kubectl-tap`, allowing it to be invoked as `kubectl tap`.
+Kubetap's binary is `kubectl-tap`. This makes kubetap a [kubectl plugin][kubectl-plugin],
+allowing it to be invoked as `kubectl tap`.
 
 Kubetap inherits many configuration options from `kubectl`, such as: `--context`,
 `--namespace` (or `-n`), `--as`, etc.
@@ -153,3 +154,4 @@ This project was created to compliment the [Soluble platform][soluble].
 [build-status]: https://github.com/soluble-ai/kubetap/actions
 [video]: https://www.youtube.com/watch?v=hBroFtlxvkM
 [building-kubetap]: https://www.soluble.ai/blog/building-kubetap
+[kubectl-plugin]: https://kubernetes.io/docs/tasks/extend-kubectl/kubectl-plugins/
