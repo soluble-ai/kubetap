@@ -49,12 +49,6 @@ The recommended installation method is to clone the repository and run:
 make
 ```
 
-Kubetap can also be installed from source using the following one-liner:
-
-```sh
-cd && GO111MODULE=on go get github.com/soluble-ai/kubetap/cmd/kubectl-tap@latest
-```
-
 ### Homebrew
 
 Soluble provides a [homebrew formula repository](https://github.com/soluble-ai/homebrew-kubetap).
@@ -69,6 +63,14 @@ brew install kubetap
 
 Binary releases for Mac (non-notarized), Windows, and Linux of varying
 architectures are available from the [Releases page](https://github.com/soluble-ai/kubetap/releases).
+
+## With Krew
+
+Kubetap can be installed with krew:
+
+```sh
+kubectl krew install tap
+```
 
 ## Usage
 

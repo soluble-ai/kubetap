@@ -27,6 +27,8 @@ builds:
     - goos: darwin
       goarch: arm
     - goos: windows
+      goarch: 386
+    - goos: windows
       goarch: arm64
     - goos: windows
       goarch: arm
@@ -52,21 +54,3 @@ changelog:
     - '^test:'
     - '^scripts:'
     - '^proxies:'
-# Goreleaser brew only provides binary packages, which is pretty
-# useless on Mac as of notarization.
-# We instead build from source, requiring the Go toolchain which
-# is acceptable, as kubernetes-cli already requires this.
-#brews:
-#  -
-#    # brew only supports one 32-bit ARM version
-#    goarm: 6
-#    github:
-#      owner: soluble-ai
-#      name: homebrew-kubetap
-#    commit_author:
-#      name: kubetap-bot
-#      email: devnull@soluble.ai
-#    homepage: "https://github.com/soluble-ai/kubetap"
-#    description: "Proxy Kubernetes Services with ease"
-#    test: |
-#      system "#{bin}/kubectl-tap version"

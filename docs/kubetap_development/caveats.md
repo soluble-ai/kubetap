@@ -49,19 +49,3 @@ cannot target ports 7777 or 2244.
 If you use PSPs, the target Pod will need access to `ConfigMap`s and `EmptyDir`s.
 
 If the target Pod does not have access to these resources, kubetap will fail.
-
-## Kubetap Development
-
-### Mac Notarization
-
-Most developers use Macs (sorry, it's true), and having un-notarized binaries is
-a problem. Until that's resolved, building from source is the only recommended installation
-mechanism for Mac operators.
-
-### Krew Plugin
-
-From my light browsing of the [krew index](https://github.com/kubernetes-sigs/krew-index/tree/master/plugins)
-it seems that all of the plugins are binary only. This is very unfortunate.
-
-Due to the Mac notarization changes described above, kubetap will not have a
-krew plugin.
