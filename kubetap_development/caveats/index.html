@@ -429,33 +429,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#kubetap-development" class="md-nav__link">
-    Kubetap Development
-  </a>
-  
-    <nav class="md-nav" aria-label="Kubetap Development">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#mac-notarization" class="md-nav__link">
-    Mac Notarization
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#krew-plugin" class="md-nav__link">
-    Krew Plugin
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -584,33 +557,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#kubetap-development" class="md-nav__link">
-    Kubetap Development
-  </a>
-  
-    <nav class="md-nav" aria-label="Kubetap Development">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#mac-notarization" class="md-nav__link">
-    Mac Notarization
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#krew-plugin" class="md-nav__link">
-    Krew Plugin
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -660,16 +606,6 @@ cannot target ports 7777 or 2244.</p>
 <h3 id="security-restrictions">Security Restrictions</h3>
 <p>If you use PSPs, the target Pod will need access to <code>ConfigMap</code>s and <code>EmptyDir</code>s.</p>
 <p>If the target Pod does not have access to these resources, kubetap will fail.</p>
-<h2 id="kubetap-development">Kubetap Development</h2>
-<h3 id="mac-notarization">Mac Notarization</h3>
-<p>Most developers use Macs (sorry, it's true), and having un-notarized binaries is
-a problem. Until that's resolved, building from source is the only recommended installation
-mechanism for Mac operators.</p>
-<h3 id="krew-plugin">Krew Plugin</h3>
-<p>From my light browsing of the <a href="https://github.com/kubernetes-sigs/krew-index/tree/master/plugins">krew index</a>
-it seems that all of the plugins are binary only. This is very unfortunate.</p>
-<p>Due to the Mac notarization changes described above, kubetap will not have a
-krew plugin.</p>
                 
               
               
