@@ -1,3 +1,16 @@
+// Copyright 2020 Soluble Inc
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package main
 
 import (
@@ -141,14 +154,14 @@ func (m *Mitmproxy) String() string {
 func (m *Mitmproxy) ReadyEnv() error {
 	configmapsClient := m.Client.CoreV1().ConfigMaps(m.ProxyOpts.Namespace)
 	// Create the ConfigMap based the options we're configuring mitmproxy with
-	if err := createConfigMap(configmapsClient, m.ProxyOpts); err != nil {
+	if err := createMitmproxyConfigMap(configmapsClient, m.ProxyOpts); err != nil {
 		// If the service hasn't been tapped but still has a configmap from a previous
 		// run (which can happen if the deployment borks and "tap off" isn't explicitly run,
 		// delete the configmap and try again.
 		// This is mostly here to fix development environments that become broken during
 		// code testing.
-		_ = destroyConfigMap(configmapsClient, m.ProxyOpts.Target)
-		rErr := createConfigMap(configmapsClient, m.ProxyOpts)
+		_ = destroyMitmproxyConfigMap(configmapsClient, m.ProxyOpts.Target)
+		rErr := createMitmproxyConfigMap(configmapsClient, m.ProxyOpts)
 		if rErr != nil {
 			if errors.Is(os.ErrInvalid, rErr) {
 				return fmt.Errorf("there was an unexpected problem creating the ConfigMap")
@@ -162,12 +175,12 @@ func (m *Mitmproxy) ReadyEnv() error {
 // UnreadyEnv removes tap supporting configmap.
 func (m *Mitmproxy) UnreadyEnv() error {
 	configmapsClient := m.Client.CoreV1().ConfigMaps(m.ProxyOpts.Namespace)
-	return destroyConfigMap(configmapsClient, m.ProxyOpts.Target)
+	return destroyMitmproxyConfigMap(configmapsClient, m.ProxyOpts.Target)
 }
 
-// createConfigMap creates a mitmproxy configmap based on the proxy mode, however currently
+// createMitmproxyConfigMap creates a mitmproxy configmap based on the proxy mode, however currently
 // only "reverse" mode is supported.
-func createConfigMap(configmapClient corev1.ConfigMapInterface, proxyOpts ProxyOptions) error {
+func createMitmproxyConfigMap(configmapClient corev1.ConfigMapInterface, proxyOpts ProxyOptions) error {
 	// TODO: eventually, we should build a struct and use yaml to marshal this,
 	// but for now we're just doing string concatenation.
 	var mitmproxyConfig []byte
@@ -223,8 +236,8 @@ func createConfigMap(configmapClient corev1.ConfigMapInterface, proxyOpts ProxyO
 	return nil
 }
 
-// destroyConfigMap removes a mitmproxy ConfigMap from the environment.
-func destroyConfigMap(configmapClient corev1.ConfigMapInterface, serviceName string) error {
+// destroyMitmproxyConfigMap removes a mitmproxy ConfigMap from the environment.
+func destroyMitmproxyConfigMap(configmapClient corev1.ConfigMapInterface, serviceName string) error {
 	if serviceName == "" {
 		return os.ErrInvalid
 	}

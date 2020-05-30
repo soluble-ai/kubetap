@@ -15,10 +15,8 @@ ci.mod
 ci.sum
 ig-tests.mod
 ig-tests.sum
-docs/_book/
 *_original
 site/
 .vim/
 venv/
 coverage.*
-krew/

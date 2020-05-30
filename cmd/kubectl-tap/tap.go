@@ -43,8 +43,7 @@ import (
 	"k8s.io/client-go/transport/spdy"
 	"k8s.io/client-go/util/retry"
 
-	_ "k8s.io/client-go/plugin/pkg/client/auth/azure"
-	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 )
 
 const (
@@ -91,8 +90,13 @@ type Tap interface {
 
 	// PatchDeployment tweaks a Deployment after a Sidecar is added
 	// during the tap process.
+	// Example: mitmproxy calls this function to configure the ConfigMap volume refs.
 	PatchDeployment(*k8sappsv1.Deployment)
 
+	// ReadyEnv and UnreadyEnv are used to prepare the environment
+	// with resources that will be necessary for the sidecar, but do
+	// not exist within a given Deployment.
+	// Example: mitmproxy calls this function to apply and remove ConfigMaps for mitmproxy.
 	ReadyEnv() error
 	UnreadyEnv() error
 

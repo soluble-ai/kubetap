@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"io/ioutil"
-	"os"
 	"strings"
 	"testing"
 
@@ -175,34 +174,6 @@ func Test_NewListCommand(t *testing.T) {
 				out, err := ioutil.ReadAll(b)
 				require.Nil(err)
 				require.Contains(string(out), tc.ExpectedOut)
-			}
-		})
-	}
-}
-
-func Test_DestroyConfigMap(t *testing.T) {
-	tests := []struct {
-		Name        string
-		ServiceName string
-		ClientFunc  func() *fake.Clientset
-		Err         error
-	}{
-		{"simple", "sample-service", fakeClientTappedSimple, nil},
-		{"untapped", "sample-service", fakeClientUntappedSimple, ErrConfigMapNoMatch},
-		{"no_svc_name", "", fakeClientTappedSimple, os.ErrInvalid},
-		{"missing_annotations", "sample-service", fakeClientTappedWithoutAnnotations, ErrConfigMapNoMatch},
-	}
-	for _, tc := range tests {
-		t.Run(tc.Name, func(t *testing.T) {
-			require := require.New(t)
-			fakeClient := tc.ClientFunc()
-			cmClient := fakeClient.CoreV1().ConfigMaps("default")
-			err := destroyConfigMap(cmClient, tc.ServiceName)
-			if tc.Err != nil {
-				require.NotNil(err)
-				require.True(errors.Is(err, tc.Err))
-			} else {
-				require.Nil(err)
 			}
 		})
 	}
