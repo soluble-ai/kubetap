@@ -73,10 +73,10 @@ var MitmproxySidecarContainer = v1.Container{
 	},
 	VolumeMounts: []v1.VolumeMount{
 		{
-			//Name:      kubetapConfigMapPrefix + dpl.Name, // Name is controlled by main
+			//Name:    "", // Name is controlled by main
 			MountPath: "/home/mitmproxy/config/",
-			// we store outside main dir to prevent RO problems, see below.
-			// this also means that we need to wrap the official mitmproxy container.
+			// We store outside main dir to prevent RO problems, see below.
+			// This also means that we need to wrap the official mitmproxy container.
 			/*
 				// *sigh* https://github.com/kubernetes/kubernetes/issues/64120
 				ReadOnly: false, // mitmproxy container does a chown
