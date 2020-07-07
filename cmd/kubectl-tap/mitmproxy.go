@@ -160,7 +160,7 @@ func (m *Mitmproxy) ReadyEnv() error {
 		// delete the configmap and try again.
 		// This is mostly here to fix development environments that become broken during
 		// code testing.
-		_ = destroyMitmproxyConfigMap(configmapsClient, m.ProxyOpts.Target)
+		_ = destroyMitmproxyConfigMap(configmapsClient, m.ProxyOpts.dplName)
 		rErr := createMitmproxyConfigMap(configmapsClient, m.ProxyOpts)
 		if rErr != nil {
 			if errors.Is(os.ErrInvalid, rErr) {
@@ -175,7 +175,7 @@ func (m *Mitmproxy) ReadyEnv() error {
 // UnreadyEnv removes tap supporting configmap.
 func (m *Mitmproxy) UnreadyEnv() error {
 	configmapsClient := m.Client.CoreV1().ConfigMaps(m.ProxyOpts.Namespace)
-	return destroyMitmproxyConfigMap(configmapsClient, m.ProxyOpts.Target)
+	return destroyMitmproxyConfigMap(configmapsClient, m.ProxyOpts.dplName)
 }
 
 // createMitmproxyConfigMap creates a mitmproxy configmap based on the proxy mode, however currently
@@ -210,10 +210,10 @@ func createMitmproxyConfigMap(configmapClient corev1.ConfigMapInterface, proxyOp
 	cmData[mitmproxyConfigFile] = mitmproxyConfig
 	cm := v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      kubetapConfigMapPrefix + proxyOpts.Target,
+			Name:      kubetapConfigMapPrefix + proxyOpts.dplName,
 			Namespace: proxyOpts.Namespace,
 			Annotations: map[string]string{
-				annotationConfigMap: configMapAnnotationPrefix + proxyOpts.Target,
+				annotationConfigMap: configMapAnnotationPrefix + proxyOpts.dplName,
 			},
 		},
 		BinaryData: cmData,
@@ -237,8 +237,8 @@ func createMitmproxyConfigMap(configmapClient corev1.ConfigMapInterface, proxyOp
 }
 
 // destroyMitmproxyConfigMap removes a mitmproxy ConfigMap from the environment.
-func destroyMitmproxyConfigMap(configmapClient corev1.ConfigMapInterface, serviceName string) error {
-	if serviceName == "" {
+func destroyMitmproxyConfigMap(configmapClient corev1.ConfigMapInterface, deploymentName string) error {
+	if deploymentName == "" {
 		return os.ErrInvalid
 	}
 	cms, err := configmapClient.List(context.TODO(), metav1.ListOptions{})
@@ -252,7 +252,7 @@ func destroyMitmproxyConfigMap(configmapClient corev1.ConfigMapInterface, servic
 			continue
 		}
 		for k, v := range anns {
-			if k == annotationConfigMap && v == configMapAnnotationPrefix+serviceName {
+			if k == annotationConfigMap && v == configMapAnnotationPrefix+deploymentName {
 				targetConfigMapNames = append(targetConfigMapNames, cm.Name)
 			}
 		}

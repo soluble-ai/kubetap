@@ -24,22 +24,22 @@ import (
 
 func Test_DestroyMitmproxyConfigMap(t *testing.T) {
 	tests := []struct {
-		Name        string
-		ServiceName string
-		ClientFunc  func() *fake.Clientset
-		Err         error
+		Name           string
+		DeploymentName string
+		ClientFunc     func() *fake.Clientset
+		Err            error
 	}{
-		{"simple", "sample-service", fakeClientTappedSimple, nil},
-		{"untapped", "sample-service", fakeClientUntappedSimple, ErrConfigMapNoMatch},
+		{"simple", "sample-deployment", fakeClientTappedSimple, nil},
+		{"untapped", "sample-deployment", fakeClientUntappedSimple, ErrConfigMapNoMatch},
 		{"no_svc_name", "", fakeClientTappedSimple, os.ErrInvalid},
-		{"missing_annotations", "sample-service", fakeClientTappedWithoutAnnotations, ErrConfigMapNoMatch},
+		{"missing_annotations", "sample-deployment", fakeClientTappedWithoutAnnotations, ErrConfigMapNoMatch},
 	}
 	for _, tc := range tests {
 		t.Run(tc.Name, func(t *testing.T) {
 			require := require.New(t)
 			fakeClient := tc.ClientFunc()
 			cmClient := fakeClient.CoreV1().ConfigMaps("default")
-			err := destroyMitmproxyConfigMap(cmClient, tc.ServiceName)
+			err := destroyMitmproxyConfigMap(cmClient, tc.DeploymentName)
 			if tc.Err != nil {
 				require.NotNil(err)
 				require.True(errors.Is(err, tc.Err))

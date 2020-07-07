@@ -109,13 +109,23 @@ type Tap interface {
 
 // ProxyOptions are options used to configure the Tap implementation.
 type ProxyOptions struct {
-	Target        string   `json:"target"`
-	Protocol      Protocol `json:"protocol"`
-	UpstreamHTTPS bool     `json:"upstream_https"`
-	UpstreamPort  string   `json:"upstream_port"`
-	Mode          string   `json:"mode"`
-	Namespace     string   `json:"namespace"`
-	Image         string   `json:"image"`
+	// Target is the target Service
+	Target string `json:"target"`
+	// Protocol is the protocol type, one of [http, https]
+	Protocol Protocol `json:"protocol"`
+	// UpstreamHTTPS should be set to true if the target is using HTTPS
+	UpstreamHTTPS bool `json:"upstream_https"`
+	// UpstreamPort is the listening port for the target Service
+	UpstreamPort string `json:"upstream_port"`
+	// Mode is the proxy mode. Only "reverse" is currently supported.
+	Mode string `json:"mode"`
+	// Namespace is the namespace that the Service and Deployment are in
+	Namespace string `json:"namespace"`
+	// Image is the proxy image to deploy as a sidecar
+	Image string `json:"image"`
+
+	// dplName tracks the current deployment target
+	dplName string
 }
 
 // NewListCommand lists Services that are already tapped.
@@ -250,13 +260,15 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 			}
 			// if named, must determine port from deployment spec
 			if ports.TargetPort.Type == intstr.String {
-				dp, err := deploymentFromSelectors(deploymentsClient, targetService.Spec.Selector)
+				var err error
+				targetDpl, err := deploymentFromSelectors(deploymentsClient, targetService.Spec.Selector)
 				if err != nil {
-					return fmt.Errorf("error resolving Deployment from Service selectors: %w", err)
+					return fmt.Errorf("error resolving Deployment from Service selectors while setting proxy ports: %w", err)
 				}
-				for _, c := range dp.Spec.Template.Spec.Containers {
+				for _, c := range targetDpl.Spec.Template.Spec.Containers {
 					for _, p := range c.Ports {
 						if p.Name == ports.TargetPort.String() {
+							// Set the upstream (target) Service port
 							proxyOpts.UpstreamPort = strconv.Itoa(int(p.ContainerPort))
 						}
 					}
@@ -266,6 +278,14 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 				}
 			}
 		}
+
+		targetDpl, err := deploymentFromSelectors(deploymentsClient, targetService.Spec.Selector)
+		if err != nil {
+			return fmt.Errorf("error resolving Deployment from Service selectors: %w", err)
+		}
+		proxyOpts.dplName = targetDpl.Name
+		// Save the target Deployment name to anchor the ConfigMap
+		// to the Deployment.
 
 		// Get a proxy based on the protocol type
 		var proxy Tap
@@ -292,6 +312,8 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 		if err != nil {
 			return err
 		}
+		// set the Deployment name so the configmap tracks a specific Deployment
+
 		sidecar := proxy.Sidecar(dpl.Name)
 		sidecar.Image = image
 		sidecar.Args = commandArgs
@@ -490,19 +512,6 @@ func NewUntapCommand(client kubernetes.Interface, viper *viper.Viper) func(*cobr
 		deploymentsClient := client.AppsV1().Deployments(namespace)
 		servicesClient := client.CoreV1().Services(namespace)
 
-		//TODO cleanup
-		// for the cleanup, we only need to provide the namespace. The fact that I have to write
-		// this probably means it needs to be refactored again later.
-		proxy := NewMitmproxy(client, ProxyOptions{
-			Namespace: namespace,
-			Target:    targetSvcName,
-		})
-		if err := proxy.UnreadyEnv(); err != nil {
-			if !errors.Is(ErrConfigMapNoMatch, err) {
-				return err
-			}
-		}
-
 		targetService, err := client.CoreV1().Services(namespace).Get(context.TODO(), targetSvcName, metav1.GetOptions{})
 		if err != nil {
 			return err
@@ -514,6 +523,20 @@ func NewUntapCommand(client kubernetes.Interface, viper *viper.Viper) func(*cobr
 		if dpl.Namespace != namespace {
 			panic(ErrDeploymentOutsideNamespace)
 		}
+
+		proxy := NewMitmproxy(client, ProxyOptions{
+			Namespace: namespace,
+			Target:    targetSvcName,
+			dplName:   dpl.Name,
+		})
+
+		if err := proxy.UnreadyEnv(); err != nil {
+			// both error types below can be thrown
+			if !errors.Is(ErrConfigMapNoMatch, err) {
+				return err
+			}
+		}
+
 		retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			// Explicitly re-fetch the deployment to reduce the chance of having a race
 			deployment, getErr := deploymentsClient.Get(context.TODO(), dpl.Name, metav1.GetOptions{})

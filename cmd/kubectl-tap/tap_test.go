@@ -71,8 +71,9 @@ func Test_NewTapCommand(t *testing.T) {
 			cmd.SetOutput(ioutil.Discard)
 			err := NewTapCommand(fakeClient, &rest.Config{}, testViper)(cmd, []string{"sample-service"})
 			if tc.Err != nil {
-				require.NotNil(err)
-				require.True(errors.Is(err, tc.Err))
+				if !errors.Is(err, tc.Err) {
+					t.Fatalf("expected (%q), got (%q)", tc.Err, err)
+				}
 			} else {
 				// sanity checks
 				require.Nil(err)
@@ -90,7 +91,7 @@ func Test_NewTapCommand(t *testing.T) {
 					require.GreaterOrEqual(len(c.Ports), 2, "tap port was not added to the deployment")
 				}
 				// configmap checks
-				fakeCM, err := fakeClient.CoreV1().ConfigMaps(testViper.GetString("namespace")).Get(context.TODO(), kubetapConfigMapPrefix+"sample-service", metav1.GetOptions{})
+				fakeCM, err := fakeClient.CoreV1().ConfigMaps(testViper.GetString("namespace")).Get(context.TODO(), kubetapConfigMapPrefix+fakeDeployment.Name, metav1.GetOptions{})
 				require.Nil(err)
 				require.NotNil(fakeCM)
 				require.True(strings.Contains(fakeCM.Name, kubetapConfigMapPrefix))
@@ -257,7 +258,7 @@ var (
 					},
 					Volumes: []v1.Volume{
 						{
-							Name: kubetapConfigMapPrefix + "sample-service",
+							Name: kubetapConfigMapPrefix + "sample-deployment",
 						},
 					},
 				},
@@ -294,10 +295,10 @@ var (
 
 	simpleConfigMapTapped = v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      kubetapConfigMapPrefix + "sample-service",
+			Name:      kubetapConfigMapPrefix + "sample-deployment",
 			Namespace: "default",
 			Annotations: map[string]string{
-				annotationConfigMap: configMapAnnotationPrefix + "sample-service",
+				annotationConfigMap: configMapAnnotationPrefix + "sample-deployment",
 			},
 		},
 	}
