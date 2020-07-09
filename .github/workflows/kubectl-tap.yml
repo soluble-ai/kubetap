@@ -121,7 +121,7 @@ jobs:
         args: release --rm-dist
       env:
         GITHUB_TOKEN: ${{ secrets.SOLUBLE_KUBETAP_BOT_TOKEN }}
-    -
+    - 
       name: Update homebrew-tap
       if: "!contains(github.ref, '-')" # skip RCs
       uses: mislav/bump-homebrew-formula-action@v1.6
@@ -130,3 +130,7 @@ jobs:
         homebrew-tap: soluble-ai/homebrew-kubetap
       env:
         COMMITTER_TOKEN: ${{ secrets.SOLUBLE_KUBETAP_BOT_TOKEN }}
+#    - 
+#      name: Update krew plugin
+#      if: "!contains(github.ref, '-')" # skip RCs
+#      uses: rajatjindal/krew-release-bot@v0.0.38
