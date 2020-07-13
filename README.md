@@ -16,6 +16,10 @@ proxies for Kubernetes Services.
 
 [Here is a video presentation and demo of the project][video].
 
+A short demo of using Kubetap to proxy [Harbor](https://goharbor.io/) is shown below:
+
+![kubetap-demo](./docs/img/kubetap_demo.gif)
+
 ## Why Kubetap?
 
 Kubetap arose from a need to quickly and efficiently proxy Kubernetes Services
