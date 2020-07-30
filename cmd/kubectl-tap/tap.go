@@ -452,7 +452,7 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 			&url.URL{
 				Scheme: "https",
 				Path:   path,
-				Host:   strings.TrimLeft(config.Host, `htps:/`),
+				Host:   strings.TrimPrefix(strings.TrimPrefix(config.Host, `http://`), `https://`),
 			},
 		)
 		fw, err := portforward.New(dialer,
