@@ -53,3 +53,14 @@ docker run -v "${HOME}/.kube/:/.kube/:ro" 'gcr.io/soluble-oss/kubectl-tap:latest
 ```sh
 docker run -v "${HOME}/.kube/:.kube/:ro" 'gcr.io/soluble-oss/kubectl-tap:latest' off -n mynamespace myservice
 ```
+
+## Image variations
+
+Kubetap is built on alpine, and available at `gcr.io/soluble-ass/kubectl-tap`.
+Images are distributed under two major tags:
+
+| Image and tag | Description |
+| --- | --- |
+| `gcr.io/soluble-oss/kubectl-tap:latest` | Alpine build and `sratch` execution environment. Tiny container, no shell. |
+| `gcr.io/soluble-oss/kubectl-tap:alpine` | Alpine build and execution environment. Useful for debugging, has a shell. |
+

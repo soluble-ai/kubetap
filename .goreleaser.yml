@@ -39,13 +39,14 @@ archives:
     windows: Windows
     386: i386
     amd64: x86_64
+  name_template: '{{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
   format_overrides:
     - goos: windows
       format: zip
 checksum:
   name_template: 'kubetap_checksums.txt'
 snapshot:
-  name_template: "{{ .Tag }}-next"
+  name_template: '{{ .Tag }}-next'
 changelog:
   sort: asc
   filters:
@@ -54,3 +55,20 @@ changelog:
     - '^test:'
     - '^scripts:'
     - '^proxies:'
+brews:
+  - 
+    name: Kubetap
+    tap:
+      owner: soluble-ai
+      name: homebrew-kubetap
+      skip_upload: false
+      download_strategy: CurlDownloadStrategy
+      caveats: 'kubetap is best invoked as: $ kubectl tap'
+      homepage: 'https://github.com/soluble-ai/kubetap'
+      description: 'Kubetap is a kubectl plugin to interactively proxy Kubernetes Services with ease'
+      custom_block: |
+        head "https://github.com/soluble-ai/kubetap.git"
+      test: |
+        system "#{bin}/kubectl-tap version"
+      install: |
+        bin.install "./kubectl-tap"

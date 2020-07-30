@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"io/ioutil"
-	"os"
 	"strings"
 	"testing"
 
@@ -72,8 +71,9 @@ func Test_NewTapCommand(t *testing.T) {
 			cmd.SetOutput(ioutil.Discard)
 			err := NewTapCommand(fakeClient, &rest.Config{}, testViper)(cmd, []string{"sample-service"})
 			if tc.Err != nil {
-				require.NotNil(err)
-				require.True(errors.Is(err, tc.Err))
+				if !errors.Is(err, tc.Err) {
+					t.Fatalf("expected (%q), got (%q)", tc.Err, err)
+				}
 			} else {
 				// sanity checks
 				require.Nil(err)
@@ -91,7 +91,7 @@ func Test_NewTapCommand(t *testing.T) {
 					require.GreaterOrEqual(len(c.Ports), 2, "tap port was not added to the deployment")
 				}
 				// configmap checks
-				fakeCM, err := fakeClient.CoreV1().ConfigMaps(testViper.GetString("namespace")).Get(context.TODO(), kubetapConfigMapPrefix+"sample-service", metav1.GetOptions{})
+				fakeCM, err := fakeClient.CoreV1().ConfigMaps(testViper.GetString("namespace")).Get(context.TODO(), kubetapConfigMapPrefix+fakeDeployment.Name, metav1.GetOptions{})
 				require.Nil(err)
 				require.NotNil(fakeCM)
 				require.True(strings.Contains(fakeCM.Name, kubetapConfigMapPrefix))
@@ -180,34 +180,6 @@ func Test_NewListCommand(t *testing.T) {
 	}
 }
 
-func Test_DestroyConfigMap(t *testing.T) {
-	tests := []struct {
-		Name        string
-		ServiceName string
-		ClientFunc  func() *fake.Clientset
-		Err         error
-	}{
-		{"simple", "sample-service", fakeClientTappedSimple, nil},
-		{"untapped", "sample-service", fakeClientUntappedSimple, ErrConfigMapNoMatch},
-		{"no_svc_name", "", fakeClientTappedSimple, os.ErrInvalid},
-		{"missing_annotations", "sample-service", fakeClientTappedWithoutAnnotations, ErrConfigMapNoMatch},
-	}
-	for _, tc := range tests {
-		t.Run(tc.Name, func(t *testing.T) {
-			require := require.New(t)
-			fakeClient := tc.ClientFunc()
-			cmClient := fakeClient.CoreV1().ConfigMaps("default")
-			err := destroyConfigMap(cmClient, tc.ServiceName)
-			if tc.Err != nil {
-				require.NotNil(err)
-				require.True(errors.Is(err, tc.Err))
-			} else {
-				require.Nil(err)
-			}
-		})
-	}
-}
-
 var (
 	simpleNamespace = v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -286,7 +258,7 @@ var (
 					},
 					Volumes: []v1.Volume{
 						{
-							Name: kubetapConfigMapPrefix + "sample-service",
+							Name: kubetapConfigMapPrefix + "sample-deployment",
 						},
 					},
 				},
@@ -323,10 +295,10 @@ var (
 
 	simpleConfigMapTapped = v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      kubetapConfigMapPrefix + "sample-service",
+			Name:      kubetapConfigMapPrefix + "sample-deployment",
 			Namespace: "default",
 			Annotations: map[string]string{
-				annotationConfigMap: configMapAnnotationPrefix + "sample-service",
+				annotationConfigMap: configMapAnnotationPrefix + "sample-deployment",
 			},
 		},
 	}
