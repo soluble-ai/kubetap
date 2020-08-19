@@ -3,7 +3,7 @@ WORKDIR $GOPATH/src/github.com/soluble-ai/kubetap
 COPY . .
 RUN apk add --no-cache -U upx && \
     go mod download && \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/kubectl-tap ./cmd/kubectl-tap && \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-w -s" -o /go/bin/kubectl-tap ./cmd/kubectl-tap && \
     upx /go/bin/kubectl-tap
 
 FROM alpine:latest as alpine

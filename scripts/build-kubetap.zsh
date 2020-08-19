@@ -12,6 +12,6 @@ source ${script_dir}/_pre.zsh
 go mod download
 
 # build and install
-go install -v -ldflags="-s -w" ./cmd/kubectl-tap
+go install -v -trimpath -ldflags="-s -w" ./cmd/kubectl-tap
 
 source ${script_dir}/_post.zsh
