@@ -57,10 +57,11 @@ changelog:
     - '^proxies:'
 brews:
   - 
-    name: Kubetap
+    name: kubetap
     tap:
       owner: soluble-ai
       name: homebrew-kubetap
+    folder: Formula
     skip_upload: false
     download_strategy: CurlDownloadStrategy
     caveats: 'kubetap is best invoked as: $ kubectl tap'
