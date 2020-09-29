@@ -5,13 +5,9 @@
 The recommended installation method is to clone the repository and run:
 
 ```sh
-make
-```
+$ go generate
 
-Kubetap can also be installed from source using the following one-liner:
-
-```sh
-cd && GO111MODULE=on go get github.com/soluble-ai/kubetap/cmd/kubectl-tap@latest
+$ go install ./cmd/kubectl-tap
 ```
 
 ## Homebrew

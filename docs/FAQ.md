@@ -4,8 +4,7 @@
 
 ### Go toolchain not new enough
 
-Kubetap uses the [Go 1.13 errors package](https://blog.golang.org/go1.13-errors),
-which makes Go v1.13 the minimum build target.
+Kubetap requires Go version 1.14 or later.
 
 You can check the current Go version by running:
 

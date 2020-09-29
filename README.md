@@ -50,7 +50,9 @@ below.
 The recommended installation method is to clone the repository and run:
 
 ```sh
-make
+$ go generate
+
+$ go install ./cmd/kubectl-tap
 ```
 
 ### Homebrew
