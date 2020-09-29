@@ -506,12 +506,9 @@
                 <h1 id="installation">Installation</h1>
 <h2 id="from-source">From Source</h2>
 <p>The recommended installation method is to clone the repository and run:</p>
-<div class="codehilite"><pre><span></span><code>make
-</code></pre></div>
+<div class="codehilite"><pre><span></span><code>$ go generate
 
-
-<p>Kubetap can also be installed from source using the following one-liner:</p>
-<div class="codehilite"><pre><span></span><code><span class="nb">cd</span> <span class="o">&amp;&amp;</span> <span class="nv">GO111MODULE</span><span class="o">=</span>on go get github.com/soluble-ai/kubetap/cmd/kubectl-tap@latest
+$ go install ./cmd/kubectl-tap
 </code></pre></div>
 
 
