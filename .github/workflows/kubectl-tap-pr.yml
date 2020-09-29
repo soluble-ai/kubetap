@@ -29,11 +29,13 @@ jobs:
       name: Checkout
       uses: actions/checkout@v2
     - 
-      name: Build
-      run: ./scripts/build.zsh
+      name: List and Test
+      run: |
+        go generate ./...
     - 
-      name: Unit Test
-      run: ./scripts/test.zsh
+      name: Build
+      run: |
+        go install -v -trimpath -ldflags="-s -w" ./cmd/kubectl-tap
     - 
       name: Integration Test
       run: ./scripts/ig-test.zsh
