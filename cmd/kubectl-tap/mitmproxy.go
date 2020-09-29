@@ -43,8 +43,8 @@ web_open_browser: false
 // MitmproxySidecarContainer is the default proxy sidecar for HTTP Taps.
 var MitmproxySidecarContainer = v1.Container{
 	Name: kubetapContainerName,
-	//Image:           image,       // Image is controlled by main
-	//Args:            commandArgs, // Args is controlled by main
+	// Image:           image,       // Image is controlled by main
+	// Args:            commandArgs, // Args is controlled by main
 	ImagePullPolicy: v1.PullAlways,
 	Ports: []v1.ContainerPort{
 		{
@@ -73,7 +73,7 @@ var MitmproxySidecarContainer = v1.Container{
 	},
 	VolumeMounts: []v1.VolumeMount{
 		{
-			//Name:    "", // Name is controlled by main
+			// Name:    "", // Name is controlled by main
 			MountPath: "/home/mitmproxy/config/",
 			// We store outside main dir to prevent RO problems, see below.
 			// This also means that we need to wrap the official mitmproxy container.
