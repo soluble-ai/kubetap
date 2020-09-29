@@ -35,7 +35,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install zsh kubectl
     - 
-      name: List and Test
+      name: Lint and Test
       run: |
         go generate ./...
     - 
