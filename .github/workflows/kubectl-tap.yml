@@ -17,7 +17,7 @@ jobs:
       name: Setup Go env
       uses: actions/setup-go@v2
       with:
-        go-version: '1.14.2'
+        go-version: '1.15.2'
     - 
       name: Checkout
       uses: actions/checkout@v2
@@ -35,11 +35,13 @@ jobs:
         sudo apt-get update
         sudo apt-get install zsh kubectl
     - 
-      name: Build
-      run: ./scripts/build.zsh
+      name: List and Test
+      run: |
+        go generate ./...
     - 
-      name: Unit Test
-      run: ./scripts/test.zsh
+      name: Build
+      run: |
+        go install -v -trimpath -ldflags="-s -w" ./cmd/kubectl-tap
     - 
       name: Integration Test
       run: ./scripts/ig-test.zsh
@@ -97,7 +99,7 @@ jobs:
       name: Setup Go env
       uses: actions/setup-go@v2
       with:
-        go-version: '1.14.2'
+        go-version: '1.15.2'
     - 
       name: Install zsh
       run: sudo apt-get update; sudo apt-get install zsh
@@ -107,30 +109,21 @@ jobs:
       with:
         fetch-depth: 0
     - 
-      #name: Unshallow for goreleaser
       name: Fetch for goreleaser
       run: git fetch --prune
     - 
       name: Build
-      run: ./scripts/build.zsh
+      run: |
+        go install -v -trimpath -ldflags="-s -w" ./cmd/kubectl-tap
     - 
       name: Release
       uses: goreleaser/goreleaser-action@v1.5.0
       with:
-        version: v0.132.1
+        version: v0.141.0
         args: release --rm-dist
       env:
         GITHUB_TOKEN: ${{ secrets.SOLUBLE_KUBETAP_BOT_TOKEN }}
     - 
-      name: Update homebrew-tap
+      name: Update krew plugin
       if: "!contains(github.ref, '-')" # skip RCs
-      uses: mislav/bump-homebrew-formula-action@v1.6
-      with:
-        formula-name: kubetap
-        homebrew-tap: soluble-ai/homebrew-kubetap
-      env:
-        COMMITTER_TOKEN: ${{ secrets.SOLUBLE_KUBETAP_BOT_TOKEN }}
-#    - 
-#      name: Update krew plugin
-#      if: "!contains(github.ref, '-')" # skip RCs
-#      uses: rajatjindal/krew-release-bot@v0.0.38
+      uses: rajatjindal/krew-release-bot@v0.0.38

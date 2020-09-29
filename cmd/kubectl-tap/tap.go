@@ -222,13 +222,13 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 		}
 		// Adjust default image by protocol if not manually set
 		if image == defaultImageHTTP {
-			switch Protocol(protocol) {
+			switch Protocol(protocol) { // nolint: exhaustive
 			case protocolTCP, protocolUDP:
-				//TODO: make this container and remove error
+				// TODO: make this container and remove error
 				image = defaultImageRaw
 				return fmt.Errorf("mode %q is currently not supported", image)
 			case protocolGRPC:
-				//TODO: make this container and remove error
+				// TODO: make this container and remove error
 				image = defaultImageGRPC
 				return fmt.Errorf("mode %q is currently not supported", image)
 			}
@@ -289,11 +289,9 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 
 		// Get a proxy based on the protocol type
 		var proxy Tap
-		switch Protocol(protocol) {
+		switch Protocol(protocol) { // nolint: exhaustive
 		case protocolTCP, protocolUDP:
-			//proxy =
 		case protocolGRPC:
-			//proxy = abhhhhh
 		default:
 			// AKA, case protocolHTTP:
 			proxy = NewMitmproxy(client, proxyOpts)

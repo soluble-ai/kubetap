@@ -57,18 +57,19 @@ changelog:
     - '^proxies:'
 brews:
   - 
-    name: Kubetap
+    name: kubetap
     tap:
       owner: soluble-ai
       name: homebrew-kubetap
-      skip_upload: false
-      download_strategy: CurlDownloadStrategy
-      caveats: 'kubetap is best invoked as: $ kubectl tap'
-      homepage: 'https://github.com/soluble-ai/kubetap'
-      description: 'Kubetap is a kubectl plugin to interactively proxy Kubernetes Services with ease'
-      custom_block: |
-        head "https://github.com/soluble-ai/kubetap.git"
-      test: |
-        system "#{bin}/kubectl-tap version"
-      install: |
-        bin.install "./kubectl-tap"
+    folder: Formula
+    skip_upload: false
+    download_strategy: CurlDownloadStrategy
+    caveats: 'kubetap is best invoked as: $ kubectl tap'
+    homepage: 'https://github.com/soluble-ai/kubetap'
+    description: 'Kubetap is a kubectl plugin to interactively proxy Kubernetes Services with ease'
+    custom_block: |
+      head "https://github.com/soluble-ai/kubetap.git"
+    test: |
+      system "#{bin}/kubectl-tap version"
+    install: |
+      bin.install "./kubectl-tap"

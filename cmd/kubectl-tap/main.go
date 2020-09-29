@@ -25,7 +25,7 @@ import (
 )
 
 var (
-	// Set by CI
+	// Set by CI.
 	version = "dev"
 	date    = "not_set" //nolint: gochecknoglobals
 	commit  = "not_set" //nolint: gochecknoglobals

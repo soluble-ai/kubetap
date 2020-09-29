@@ -15,3 +15,5 @@ linters:
     - gocognit
     - goerr113
     - gochecknoglobals
+    - gci
+    - nlreturn

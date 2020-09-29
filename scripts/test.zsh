@@ -27,7 +27,7 @@ GO111MODULE=on go get -modfile=ci.mod gotest.tools/gotestsum/@${GOTESTSUM_VERSIO
 gotestsum --format=short-verbose --no-summary=skipped --junitfile=coverage.xml -- -count=1 -race -coverprofile=coverage.txt -covermode=atomic ./...
 
 # ensure we can build
-go build -v -ldflags="-s -w" -o /dev/null ./cmd/kubectl-tap 
+go build -v -trimpath -ldflags="-s -w" -o /dev/null ./cmd/kubectl-tap
 
 # tidy modules, in case this is a local build env
 go mod tidy

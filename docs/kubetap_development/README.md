@@ -19,7 +19,6 @@ Building kubetap requires the following dependencies:
 | `docker`   | Build containers      | not needed to build `kubectl-tap` binary      |
 | `go`       | Build `kubectl-tap`   | minimum Go version 1.13                       |
 | `zsh`      | Build scripts         | scripting is nicer than `bash` or `sh`        |
-| `make`     | Developer convenience | not explicit dependency, just invokes scripts |
 
 Script-managed dependencies, installed using `go get` and `ci.mod` or `ig-tests.mod`:
 
@@ -38,22 +37,7 @@ you're ready to hack on kubetap.
 ```sh
 $ cd ${GOPATH}/src/github.com/soluble-ai/kubetap
 
-$ go mod download
+$ go generate .
 
 $ go build ./cmd/kubectl-tap
-```
-
-There is a [build script](https://github.com/soluble-ai/kubetap/blob/master/scripts/build.zsh)
-which downloads Go modules, runs a linter, and runs unit tests prior to building
-the binary. This script can be invoked manually or with the `Makefile`:
-
-```sh
-make
-```
-
-Integration tests, which can take considerably longer to complete, should be run
-prior to submitting a pull request to ensure that the PR doesn't break functionality:
-
-```sh
-make test
 ```

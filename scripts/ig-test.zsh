@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
 
 script_dir=${0:A:h}
-source ${script_dir}/_pre.zsh
+#source ${script_dir}/_pre.zsh
 
 #
 # Prep env
@@ -112,4 +112,4 @@ for chart in ${_kubetap_helm_charts[@]}; do
 done
 unset _kubetap_helm_charts _kubetap_helm_services _kubetap_helm_svc_port _kubetap_iter
 
-source ${script_dir}/_post.zsh
+#source ${script_dir}/_post.zsh
