@@ -17,3 +17,5 @@ linters:
     - gochecknoglobals
     - gci
     - nlreturn
+    - exhaustivestruct
+    - wrapcheck

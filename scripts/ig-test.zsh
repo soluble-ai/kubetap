@@ -32,7 +32,7 @@ fi
 if [[ =helm == '' ]]; then
   GO111MODULE=on go get -modfile=ig-tests.mod helm/cmd/helm@${HELM_VERSION}
 fi
-helm repo add stable https://kubernetes-charts.storage.googleapis.com
+helm repo add stable https://charts.helm.sh/stable --force-update
 helm repo update
 
 # we use kind to establish a local testing cluster

@@ -3,7 +3,7 @@
 script_dir=${0:A:h}
 source ${script_dir}/_pre.zsh
 
-GOLANGCI_LINT_VERSION=v1.26.0
+GOLANGCI_LINT_VERSION=v1.35.2
 
 # fetch dependencies
 go mod download
