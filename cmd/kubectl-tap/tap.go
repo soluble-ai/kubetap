@@ -190,6 +190,9 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 		https := viper.GetBool("https")
 		portForward := viper.GetBool("portForward")
 		openBrowser := viper.GetBool("browser")
+		customProxyPort := viper.GetInt("customProxyPort")
+		disableReadinessProbe := viper.GetBool("disableReadinessProbe")
+		customProxyReadinessPath := viper.GetString("customProxyReadinessPath")
 
 		if openBrowser {
 			portForward = true
@@ -316,6 +319,31 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 		sidecar.Image = image
 		sidecar.Args = commandArgs
 
+		if customProxyPort != 0 {
+			sidecar.Ports[1].ContainerPort = int32(customProxyPort)
+			sidecar.ReadinessProbe.Handler.HTTPGet.Port = intstr.FromInt(customProxyPort)
+		}
+
+		if disableReadinessProbe == true {
+			sidecar.ReadinessProbe = nil
+		} else {
+			if customProxyReadinessPath != "" {
+				sidecar.ReadinessProbe.Handler.HTTPGet.Path = customProxyReadinessPath
+			}
+		}
+
+		sidecarEnvVars := []v1.EnvVar{}
+		envVars := viper.GetStringSlice("envVars")
+
+		for _, envVar := range envVars {
+			kv := strings.SplitN(envVar, "=", 2)
+			key := kv[0]
+			val := kv[1]
+			sidecarEnvVars = append(sidecarEnvVars, v1.EnvVar{Name: key, Value: val})
+		}
+
+		sidecar.Env = sidecarEnvVars
+
 		// Apply the Deployment configuration
 		retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			dpl.Spec.Template.Spec.Containers = append(dpl.Spec.Template.Spec.Containers, sidecar)
@@ -338,7 +366,7 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 
 		// Tap the Service to redirect the incoming traffic to our proxy, which is configured to redirect
 		// to the original port.
-		if err := tapSvc(servicesClient, targetSvcName, targetSvcPort); err != nil {
+		if err := tapSvc(servicesClient, targetSvcName, targetSvcPort, customProxyPort); err != nil {
 			fmt.Fprintln(cmd.OutOrStdout(), "Error modifying Service, reverting tap...")
 			_ = NewUntapCommand(client, viper)(cmd, args)
 			return err
@@ -453,25 +481,51 @@ func NewTapCommand(client kubernetes.Interface, config *rest.Config, viper *vipe
 				Host:   strings.TrimPrefix(strings.TrimPrefix(config.Host, `http://`), `https://`),
 			},
 		)
-		fw, err := portforward.New(dialer,
-			[]string{
+
+		portForwarderPorts := []string{}
+
+		if customProxyPort != 0 {
+			portForwarderPorts = []string{
+				fmt.Sprintf("%s:%s", strconv.Itoa(customProxyPort), strconv.Itoa(customProxyPort)),
+				fmt.Sprintf("%s:%s", "4000", strconv.Itoa(int(kubetapProxyListenPort))),
+			}
+		} else {
+			portForwarderPorts = []string{
 				fmt.Sprintf("%s:%s", strconv.Itoa(kubetapProxyWebInterfacePort), strconv.Itoa(kubetapProxyWebInterfacePort)),
 				fmt.Sprintf("%s:%s", "4000", strconv.Itoa(int(kubetapProxyListenPort))),
-			}, stopCh, readyCh, bout, berr)
+			}
+		}
+
+		fw, err := portforward.New(dialer, portForwarderPorts, stopCh, readyCh, bout, berr)
 		if err != nil {
 			return err
 		}
+
+		proxyPort := ""
+
+		if customProxyPort != 0 {
+			proxyPort = strconv.Itoa(int(customProxyPort))
+		} else {
+			proxyPort = strconv.Itoa(int(kubetapProxyWebInterfacePort))
+		}
+
 		fmt.Fprintf(cmd.OutOrStdout(), "\nPort-Forwards:\n\n")
-		fmt.Fprintf(cmd.OutOrStdout(), "  %s - http://127.0.0.1:%s\n", proxy.String(), strconv.Itoa(int(kubetapProxyWebInterfacePort)))
+		fmt.Fprintf(cmd.OutOrStdout(), "  %s - http://127.0.0.1:%s\n", proxy.String(), proxyPort)
+
 		if https {
 			fmt.Fprintf(cmd.OutOrStdout(), "  %s - https://127.0.0.1:%s\n\n", targetSvcName, "4000")
 		} else {
 			fmt.Fprintf(cmd.OutOrStdout(), "  %s - http://127.0.0.1:%s\n\n", targetSvcName, "4000")
 		}
+
 		if openBrowser {
 			go func() {
 				time.Sleep(2 * time.Second)
-				_ = browser.OpenURL("http://127.0.0.1:" + strconv.Itoa(int(kubetapProxyWebInterfacePort)))
+				if customProxyPort != 0 {
+					_ = browser.OpenURL("http://127.0.0.1:" + strconv.Itoa(int(customProxyPort)))
+				} else {
+					_ = browser.OpenURL("http://127.0.0.1:" + strconv.Itoa(int(kubetapProxyWebInterfacePort)))
+				}
 				if https {
 					_ = browser.OpenURL("https://127.0.0.1:" + "4000")
 				} else {
@@ -628,7 +682,7 @@ func kubetapPod(podClient corev1.PodInterface, deploymentName string) (v1.Pod, e
 }
 
 // tapSvc modifies a target port to point to a new proxy service.
-func tapSvc(svcClient corev1.ServiceInterface, svcName string, targetPort int32) error {
+func tapSvc(svcClient corev1.ServiceInterface, svcName string, targetPort int32, customProxyPort int) error {
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		svc, getErr := svcClient.Get(context.TODO(), svcName, metav1.GetOptions{})
 		if getErr != nil {
@@ -666,6 +720,12 @@ func tapSvc(svcClient corev1.ServiceInterface, svcName string, targetPort int32)
 			Port:       kubetapProxyWebInterfacePort,
 			TargetPort: intstr.FromInt(int(kubetapProxyWebInterfacePort)),
 		}
+
+		if customProxyPort != 0 {
+			proxySvcPort.Port = int32(customProxyPort)
+			proxySvcPort.TargetPort = intstr.FromInt(int(customProxyPort))
+		}
+
 		svc.Spec.Ports = append(svc.Spec.Ports, proxySvcPort)
 
 		// then do the swap and build a new ports list
@@ -675,7 +735,12 @@ func tapSvc(svcClient corev1.ServiceInterface, svcName string, targetPort int32)
 				if sp.Name == "" {
 					sp.Name = kubetapPortName
 				}
-				sp.TargetPort = intstr.FromInt(kubetapProxyListenPort)
+
+				if customProxyPort != 0 {
+					sp.TargetPort = intstr.FromInt(customProxyPort)
+				} else {
+					sp.TargetPort = intstr.FromInt(kubetapProxyListenPort)
+				}
 			}
 			servicePorts = append(servicePorts, sp)
 		}

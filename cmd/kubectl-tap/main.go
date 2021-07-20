@@ -78,6 +78,10 @@ func main() {
 	onCmd.Flags().Bool("port-forward", false, "enable to automatically kubctl port-forward to services")
 	onCmd.Flags().Bool("browser", false, "enable to open browser windows to service and proxy. Also enables --port-forward")
 	onCmd.Flags().String("protocol", "http", "specify a protocol. Supported protocols: [ http ]")
+	onCmd.Flags().String("custom-proxy-port", "", "target Service port for the custom proxy")
+	onCmd.Flags().Bool("disable-readiness-probe", false, "enable if readiness probe is to be disabled")
+	onCmd.Flags().String("custom-proxy-readiness-path", "", "Path for the custom proxy's readiness probe")
+	onCmd.Flags().StringArrayP("env", "e", []string{}, "Environment variables to inject into the proxy container")
 
 	rootCmd.AddCommand(versionCmd, onCmd, offCmd, listCmd)
 
@@ -107,6 +111,18 @@ func bindTapFlags(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	if err := viper.BindPFlag("protocol", cmd.Flags().Lookup("protocol")); err != nil {
+		return err
+	}
+	if err := viper.BindPFlag("customProxyPort", cmd.Flags().Lookup("custom-proxy-port")); err != nil {
+		return err
+	}
+	if err := viper.BindPFlag("disableReadinessProbe", cmd.Flags().Lookup("disable-readiness-probe")); err != nil {
+		return err
+	}
+	if err := viper.BindPFlag("customProxyReadinessPath", cmd.Flags().Lookup("custom-proxy-readiness-path")); err != nil {
+		return err
+	}
+	if err := viper.BindPFlag("envVars", cmd.Flags().Lookup("env")); err != nil {
 		return err
 	}
 	return nil
